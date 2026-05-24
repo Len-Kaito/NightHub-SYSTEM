@@ -20,7 +20,7 @@ Trước khi cài đặt, hãy đảm bảo máy tính của bạn đã cài đ�
 Mở Terminal (hoặc Command Prompt / Git Bash) và chạy lệnh sau để tải mã nguồn về máy:
 
 ```bash
-git clone https://github.com/Len-Kaito/NightHub.git
+git clone https://github.com/Len-Kaito/NightHub-SYSTEM.git
 ```
 
 ### Bước 2: Di chuyển vào thư mục dự án
