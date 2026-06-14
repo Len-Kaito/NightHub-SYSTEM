@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Edit2, Trash2, Filter, X, ChevronDown } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Filter, X, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
 const AdminMovies = () => {
@@ -18,6 +18,8 @@ const AdminMovies = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const handleSort = (key) => {
     let direction = 'asc';
@@ -141,6 +143,8 @@ const AdminMovies = () => {
     }
   };
 
+  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+
   const filteredMovies = movies.filter(m => 
     (m.title || '').toLowerCase().includes((searchTerm || '').toLowerCase()) || 
     (String(m.id) || '').toLowerCase().includes((searchTerm || '').toLowerCase())
@@ -158,6 +162,9 @@ const AdminMovies = () => {
     }
     return 0;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredMovies.length / ITEMS_PER_PAGE));
+  const paginatedMovies = filteredMovies.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
     <>
@@ -215,7 +222,7 @@ const AdminMovies = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredMovies.map((movie) => (
+              {paginatedMovies.map((movie) => (
                 <tr key={movie.id}>
                   <td style={{ color: '#888', fontWeight: 600 }}>{movie.id}</td>
                   <td style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
@@ -333,6 +340,25 @@ const AdminMovies = () => {
             Không tìm thấy phim nào phù hợp.
           </div>
         )}
+
+        {totalPages > 1 && (
+          <div className="admin-pagination">
+            <button className="admin-pagination-btn" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+              <ChevronLeft size={16} /> Trước
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <button key={page} className={`admin-pagination-btn ${currentPage === page ? 'active' : ''}`} onClick={() => setCurrentPage(page)}>
+                {page}
+              </button>
+            ))}
+            <button className="admin-pagination-btn" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+              Sau <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+        <div className="admin-pagination-info">
+          Hiển thị {paginatedMovies.length} / {filteredMovies.length} phim (Trang {currentPage}/{totalPages})
+        </div>
       </div>
       </div>
 

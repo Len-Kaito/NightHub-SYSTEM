@@ -263,3 +263,92 @@
 .admin-btn-secondary:hover {
   background-color: rgba(255,255,255,0.15);
 }
+
+/* Admin Select / Input */
+.admin-select,
+.admin-input {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: #0f1014;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.admin-select:focus,
+.admin-input:focus {
+  border-color: #1e90ff;
+}
+
+.admin-select option {
+  background: #1a1c23;
+  color: #fff;
+}
+
+.admin-select-sm {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: #0f1014;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.admin-select-sm:focus {
+  border-color: #1e90ff;
+}
+
+.admin-select-sm option {
+  background: #1a1c23;
+  color: #fff;
+}
+
+/* Admin Pagination */
+.admin-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 20px;
+}
+
+.admin-pagination-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.admin-pagination-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.15);
+}
+
+.admin-pagination-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.admin-pagination-btn.active {
+  background: var(--accent-color, #e50914);
+  font-weight: 700;
+}
+
+.admin-pagination-info {
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+  margin-top: 10px;
+}

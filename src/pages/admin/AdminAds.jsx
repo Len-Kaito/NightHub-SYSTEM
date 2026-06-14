@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, MonitorPlay } from 'lucide-react';
+import { Plus, X, MonitorPlay, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
 const AdminAds = () => {
@@ -9,6 +9,8 @@ const AdminAds = () => {
   const [formData, setFormData] = useState({
     requestedViews: 0, price: 0, videoUrl: '', partnerId: ''
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const fetchAds = () => {
     fetch('/api/admin/ads')
@@ -81,7 +83,10 @@ const AdminAds = () => {
               </tr>
             </thead>
             <tbody>
-              {ads.map((ad, idx) => (
+              {(() => {
+                const totalPages = Math.max(1, Math.ceil(ads.length / ITEMS_PER_PAGE));
+                const paginatedAds = ads.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+                return paginatedAds.map((ad, idx) => (
                 <tr key={idx}>
                   <td style={{ color: '#888', fontWeight: 600 }}>{ad.adId}</td>
                   <td style={{ fontWeight: 600, color: '#fff' }}>{ad.partnerId}</td>
@@ -90,7 +95,8 @@ const AdminAds = () => {
                   <td>{ad.price.toLocaleString()}</td>
                   <td style={{ color: '#2ed573', fontWeight: 'bold' }}>{ad.revenue.toLocaleString()}</td>
                 </tr>
-              ))}
+              ));
+              })()}
             </tbody>
           </table>
         </div>
@@ -100,6 +106,29 @@ const AdminAds = () => {
             Chưa có chiến dịch quảng cáo nào đang chạy.
           </div>
         )}
+
+        {(() => {
+          const totalPages = Math.max(1, Math.ceil(ads.length / ITEMS_PER_PAGE));
+          if (totalPages <= 1) return null;
+          return (
+            <div className="admin-pagination">
+              <button className="admin-pagination-btn" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                <ChevronLeft size={16} /> Trước
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button key={page} className={`admin-pagination-btn ${currentPage === page ? 'active' : ''}`} onClick={() => setCurrentPage(page)}>
+                  {page}
+                </button>
+              ))}
+              <button className="admin-pagination-btn" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                Sau <ChevronRight size={16} />
+              </button>
+            </div>
+          );
+        })()}
+        <div className="admin-pagination-info">
+          Hiển thị {Math.min(ITEMS_PER_PAGE, ads.length - (currentPage - 1) * ITEMS_PER_PAGE)} / {ads.length} chiến dịch (Trang {currentPage}/{Math.max(1, Math.ceil(ads.length / ITEMS_PER_PAGE))})
+        </div>
       </div>
 
       </div>

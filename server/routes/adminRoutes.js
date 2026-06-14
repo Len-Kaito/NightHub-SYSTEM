@@ -28,6 +28,8 @@ router.post('/reports/scan', adminController.scanReports);
 // ==================== NGƯỜI DÙNG ====================
 router.get('/users', adminController.getUsers);
 router.put('/users/:id/status', adminController.toggleUserStatus);
+router.get('/staff', adminController.getStaff);
+router.put('/users/:id/role', adminController.updateUserRole);
 
 // ==================== NHẬT KÝ ====================
 router.get('/logs', adminController.getLogs);

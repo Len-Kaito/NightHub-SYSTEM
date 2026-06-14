@@ -531,21 +531,108 @@ const adminController = {
     }
   },
 
-  // ==================== NHẬT KÝ (LOGS) ====================
-  getLogs: async (req, res) => {
+  // ==================== NHÂN VIÊN (STAFF) ====================
+  getStaff: async (req, res) => {
     try {
       const result = await db.execute(
-        `SELECT MaLog, NgayGio, HanhDong, DoiTuong, GhiChu, MaTK_NV FROM NHAT_KY_HE_THONG ORDER BY NgayGio DESC FETCH FIRST 50 ROWS ONLY`,
+        `SELECT nv.MaNV, nv.TenNV, tk.Email, tk.MaVT, nv.TrangThaiLV, nv.NgayBatDau
+         FROM NHAN_VIEN nv
+         JOIN TAI_KHOAN tk ON nv.MaTK = tk.MaTK
+         ORDER BY nv.NgayBatDau DESC`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
       res.json(result.rows.map(r => ({
-        id: r.MALOG,
-        timestamp: r.NGAYGIO,
-        action: r.HANHDONG,
-        target: r.DOITUONG,
-        notes: r.GHICHU,
-        adminId: r.MATK_NV
+        id: r.MANV,
+        name: r.TENNV,
+        email: r.EMAIL,
+        role: r.MAVT,
+        workStatus: r.TRANGTHAILV,
+        startDate: r.NGAYBATDAU
       })));
+    } catch (error) {
+      console.error('Lỗi lấy danh sách nhân viên:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  // ==================== CẬP NHẬT VAI TRÒ ====================
+  updateUserRole: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+      await db.execute(
+        `UPDATE TAI_KHOAN SET MaVT = :role WHERE MaTK = :id`,
+        { role, id },
+        { autoCommit: true }
+      );
+      res.json({ message: 'Cập nhật vai trò thành công' });
+    } catch (error) {
+      console.error('Lỗi cập nhật vai trò:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  // ==================== NHẬT KÝ (LOGS) ====================
+  getLogs: async (req, res) => {
+    try {
+      const { action, search, page = 1, limit = 15 } = req.query;
+      const offset = (parseInt(page) - 1) * parseInt(limit);
+
+      let whereClause = '';
+      const params = {};
+      const conditions = [];
+
+      if (action) {
+        conditions.push(`LOWER(HanhDong) LIKE '%' || LOWER(:action) || '%'`);
+        params.action = action;
+      }
+      if (search) {
+        conditions.push(`(LOWER(HanhDong) LIKE '%' || LOWER(:search) || '%' OR LOWER(GhiChu) LIKE '%' || LOWER(:search2) || '%' OR LOWER(DoiTuong) LIKE '%' || LOWER(:search3) || '%')`);
+        params.search = search;
+        params.search2 = search;
+        params.search3 = search;
+      }
+
+      if (conditions.length > 0) {
+        whereClause = 'WHERE ' + conditions.join(' AND ');
+      }
+
+      // Get total count
+      const countResult = await db.execute(
+        `SELECT COUNT(*) AS TOTAL FROM NHAT_KY_HE_THONG ${whereClause}`,
+        params, { outFormat: db.OUT_FORMAT_OBJECT }
+      );
+      const total = countResult.rows[0].TOTAL;
+
+      // Get paginated data
+      const startRow = offset;
+      const endRow = offset + parseInt(limit);
+
+      const result = await db.execute(
+        `SELECT * FROM (
+           SELECT a.*, ROWNUM rnum FROM (
+             SELECT MaLog, NgayGio, HanhDong, DoiTuong, GhiChu, MaTK_NV 
+             FROM NHAT_KY_HE_THONG ${whereClause} 
+             ORDER BY NgayGio DESC
+           ) a WHERE ROWNUM <= :endRow
+         ) WHERE rnum > :startRow`,
+        { ...params, startRow, endRow },
+        { outFormat: db.OUT_FORMAT_OBJECT }
+      );
+
+      res.json({
+        logs: result.rows.map(r => ({
+          id: r.MALOG,
+          timestamp: r.NGAYGIO,
+          action: r.HANHDONG,
+          target: r.DOITUONG,
+          notes: r.GHICHU,
+          adminId: r.MATK_NV
+        })),
+        total,
+        page: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit))
+      });
     } catch (error) {
       console.error('Lỗi lấy danh sách nhật ký:', error);
       res.status(500).json({ message: 'Lỗi server' });
