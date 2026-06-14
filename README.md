@@ -38,13 +38,13 @@ Dự án sử dụng Oracle SQL. Bạn cần chạy file SQL có sẵn trong th�
 > 1. Chạy file `DeleteTable.sql` để xóa toàn bộ cấu trúc cũ.
 > 2. Chạy lại file `build_database.sql` để nạp lại dữ liệu tươi mới.
 > 
-> *(Ghi chú thêm: Dữ liệu mẫu ban đầu có thể có một số phim đang ở trạng thái ẩn/chờ duyệt. Nếu muốn trang web hiển thị đầy đủ tất cả các phim, bạn có thể chạy lệnh SQL sau: 
+> *(Ghi chú thêm: Dữ liệu mẫu ban đầu có thể có một số phim đang ở trạng thái ẩn/chờ duyệt. Nếu muốn trang web hiển thị đầy đủ tất cả các phim, bạn có thể chạy lệnh SQL sau: )*
 ```bash
 UPDATE PHIM 
 SET TrangThaiHT = 'Công khai', 
     TrangThaiKD = 'Đã duyệt'
 COMMIT;
-```)*
+```
 
 ### Bước 3: Cài đặt và Chạy Backend (Node.js)
 Mở một cửa sổ Terminal mới:
