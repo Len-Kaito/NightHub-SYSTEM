@@ -29,11 +29,15 @@ Dự án sử dụng Oracle SQL. Bạn cần chạy các file SQL có sẵn tron
 3. Chạy file `khoi_tao_user_va_role.sql` để tạo User `NIGHTHUB` và cấp quyền cơ bản.
 4. Ngắt kết nối và **Đăng nhập lại bằng tài khoản `NIGHTHUB`** (Mật khẩu mặc định: `123456`).
 5. Chạy tuần tự các file sau trong User `NIGHTHUB`:
-   - `createtables.sql` (Tạo bảng)
-   - `insert_data_new.sql` hoặc `new_inserts.sql` (Dữ liệu mẫu)
-   - `View.sql`, `Function.sql`, `Procedure.sql`, `Trigger.sql`, `Cursor.sql` (Các logic PL/SQL)
+   - Bạn có thể chạy file `build_database.sql` (Tạo bảng, nạp dữ liệu và cấu hình View/Function/Trigger).
 
-*(Ngoài ra có thể sử dụng file `rebuild_db.bat` nếu bạn dùng Windows và đã config biến môi trường SQL*Plus).*
+*(Ngoài ra có thể sử dụng file `build_db.bat` nếu bạn dùng Windows và đã config biến môi trường SQL*Plus. Tránh tự động chạy trên các máy khác nhau nên file này sẽ nạp dữ liệu một lần duy nhất).*
+
+> [!TIP]
+> **Xóa và Nạp lại dữ liệu (Reset Database):**
+> Nếu trong quá trình chấm bài giảng viên cần làm sạch Database để test lại từ đầu, giảng viên chỉ cần:
+> 1. Chạy file `DeleteTable.sql` để xóa toàn bộ cấu trúc cũ.
+> 2. Chạy lại file `build_database.sql` (hoặc `build_db.bat`) để nạp lại dữ liệu tươi mới.
 
 ### Bước 3: Cài đặt và Chạy Backend (Node.js)
 Mở một cửa sổ Terminal mới:

@@ -1,4 +1,4 @@
-@DeleteTable.sql
+
 @createtables.sql
 @insert_data_new.sql
 @View.sql
