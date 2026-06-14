@@ -23,15 +23,17 @@ cd nighthub-react
 ```
 
 ### Bước 2: Thiết lập Cơ sở dữ liệu (Oracle Database)
-Dự án sử dụng Oracle SQL. Bạn cần chạy các file SQL có sẵn trong thư mục gốc của dự án theo thứ tự sau để khởi tạo cấu trúc và dữ liệu mẫu:
+Dự án sử dụng Oracle SQL. Bạn cần chạy file SQL có sẵn trong thư mục gốc của dự án để khởi tạo cấu trúc và dữ liệu mẫu:
 1. Mở công cụ quản lý Oracle (SQL Developer hoặc SQL*Plus).
-2. Kết nối bằng tài khoản quyền cao (`SYS` hoặc `SYSTEM`).
-3. Chạy file `khoi_tao_user_va_role.sql` để tạo User `NIGHTHUB` và cấp quyền cơ bản.
-4. Ngắt kết nối và **Đăng nhập lại bằng tài khoản `NIGHTHUB`** (Mật khẩu mặc định: `123456`).
-5. Chạy tuần tự các file sau trong User `NIGHTHUB`:
-   - Bạn có thể chạy file `build_database.sql` (Tạo bảng, nạp dữ liệu và cấu hình View/Function/Trigger).
+2. Kết nối bằng tài khoản quyền cao (mặc định là `SYSTEM` hoặc `SYS`).
+3. Chạy file `build_database.sql` (Tạo bảng, nạp dữ liệu và cấu hình View/Function/Trigger).
 
-*(Ngoài ra có thể sử dụng file `build_db.bat` nếu bạn dùng Windows và đã config biến môi trường SQL*Plus. Tránh tự động chạy trên các máy khác nhau nên file này sẽ nạp dữ liệu một lần duy nhất).*
+*(Lưu ý: File `khoi_tao_user_va_role.sql` chỉ là bài tập phân quyền sinh viên nộp kèm, giảng viên **không cần chạy** file này để chạy web).*
+
+> [!IMPORTANT]
+> **Cấu hình kết nối Backend:**
+> Mặc định Backend Node.js đang sử dụng tài khoản `SYSTEM` với mật khẩu là `123456` để kết nối vào Database.
+> Nếu Oracle của giảng viên sử dụng mật khẩu khác (ví dụ `Sys12345`), giảng viên vui lòng mở file `server/.env` và sửa lại dòng `DB_PASSWORD` cho đúng với mật khẩu của máy giảng viên.
 
 > [!TIP]
 > **Xóa và Nạp lại dữ liệu (Reset Database):**
