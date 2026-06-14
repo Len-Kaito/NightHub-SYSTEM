@@ -149,8 +149,6 @@ BEGIN
 END;
 /
 
--- Tự động xóa mềm dữ liệu
-
 -- Tạo View cho ứng dụng tương tác
 CREATE OR REPLACE VIEW V_TAI_KHOAN AS 
 SELECT * FROM TAI_KHOAN;

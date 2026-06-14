@@ -16,6 +16,7 @@ const ChatBubble = () => {
     // Chat state
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
+    const [isStaffSession, setIsStaffSession] = useState(false);
     const messagesEndRef = useRef(null);
 
     // Drag state
@@ -54,19 +55,27 @@ const ChatBubble = () => {
 
     const [isTyping, setIsTyping] = useState(false);
     const [suggestions, setSuggestions] = useState([
-        'Tìm phim hành động', 'Cách hủy gói VIP', 'Chi tiết về hỗ trợ kỹ thuật'
+        'Làm thế nào để thay đổi mật khẩu tài khoản?', 
+        'Gói VIP có quyền lợi gì?', 
+        'Làm sao để xem phim trên màn hình Tivi (Smart TV)?'
     ]);
 
     // Fetch chat history
     const fetchChatHistory = () => {
         if (isLoggedIn && activeProfileId) {
-            fetch(`/api/chat/${activeProfileId}`)
+            fetch(`/api/chat/${activeProfileId}?t=${Date.now()}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.length === 0) {
                         setMessages([{ text: 'Xin chào! 👋 Mình là trợ lý ảo của Nighthub. Mình có thể giúp gì cho bạn hôm nay?', sender: 'ai' }]);
                     } else {
                         setMessages(data);
+                        // Hide suggestions if chatting with staff
+                        const hasStaffOrRequest = data.some(m => m.sender === 'cc' || m.text.includes('Tôi muốn gặp nhân viên CSKH'));
+                        setIsStaffSession(hasStaffOrRequest);
+                        if (hasStaffOrRequest) {
+                            setSuggestions([]);
+                        }
                     }
                 })
                 .catch(err => console.error('Lỗi khi lấy lịch sử chat:', err));
@@ -88,9 +97,11 @@ const ChatBubble = () => {
 
     const handleRequestSupport = async () => {
         if (!activeProfileId) return;
-        setMessages(prev => [...prev, { text: 'Tôi muốn gặp nhân viên CSKH.', sender: 'user' }]);
         setSuggestions([]);
+        setMessages(prev => [...prev, { text: 'Tôi muốn gặp nhân viên CSKH.', sender: 'user' }]);
         setIsTyping(true);
+        setIsStaffSession(true);
+
         try {
             const res = await fetch('/api/chat/request-support', {
                 method: 'POST',
@@ -98,12 +109,35 @@ const ChatBubble = () => {
                 body: JSON.stringify({ profileId: activeProfileId })
             });
             const data = await res.json();
+            
+            setMessages(prev => [...prev, { 
+                text: data.message || 'Đã gửi yêu cầu hỗ trợ. Vui lòng chờ...', 
+                sender: 'ai' 
+            }]);
+            
             // Immediately fetch chat history to get the system auto-message
             fetchChatHistory();
         } catch (error) {
-            console.error(error);
+            console.error('Lỗi yêu cầu hỗ trợ:', error);
+            setMessages(prev => [...prev, { text: 'Lỗi hệ thống khi gọi hỗ trợ.', sender: 'bot' }]);
         } finally {
             setIsTyping(false);
+        }
+    };
+
+    const handleEndSession = async () => {
+        if (!activeProfileId) return;
+        try {
+            await fetch(`/api/chat/${activeProfileId}/end`, { method: 'POST' });
+            setIsStaffSession(false);
+            setSuggestions([
+                'Làm thế nào để thay đổi mật khẩu tài khoản?', 
+                'Gói VIP có quyền lợi gì?', 
+                'Làm sao để xem phim trên màn hình Tivi (Smart TV)?'
+            ]);
+            setMessages(prev => [...prev, { text: 'Phiên chat với nhân viên đã kết thúc. Bạn có thể trò chuyện lại với NightBot!', sender: 'ai' }]);
+        } catch (error) {
+            console.error('Lỗi khi kết thúc phiên chat:', error);
         }
     };
 
@@ -111,7 +145,7 @@ const ChatBubble = () => {
         const text = typeof textToSend === 'string' ? textToSend : inputValue;
         if (!text.trim() || !activeProfileId) return;
         
-        if (text === 'Gặp nhân viên CSKH') {
+        if (text === 'Chat với nhân viên') {
             handleRequestSupport();
             setInputValue('');
             return;
@@ -130,7 +164,9 @@ const ChatBubble = () => {
                 body: JSON.stringify({ profileId: activeProfileId, text })
             });
             const data = await res.json();
-            setMessages(prev => [...prev, data]);
+            if (data.text) {
+                setMessages(prev => [...prev, data]);
+            }
         } catch (error) {
             console.error('Lỗi khi gửi tin nhắn:', error);
             setMessages(prev => [...prev, { text: 'Xin lỗi, đã có lỗi kết nối xảy ra.', sender: 'bot' }]);
@@ -251,7 +287,12 @@ const ChatBubble = () => {
                         <img src="/images/chatbot.png" alt="Bot" className="chat-header-avatar" />
                         NightBot
                     </h4>
-                    <button className="close-chat-btn" onClick={() => setIsChatOpen(false)}>✖</button>
+                    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                        {isStaffSession && (
+                            <button className="end-chat-btn" onClick={handleEndSession} style={{fontSize: '12px', padding: '4px 8px', borderRadius: '4px', border: 'none', background: '#ff4d4f', color: '#fff', cursor: 'pointer', fontWeight: 'bold'}}>Kết thúc</button>
+                        )}
+                        <button className="close-chat-btn" onClick={() => setIsChatOpen(false)}>✖</button>
+                    </div>
                 </div>
                 <div className="chat-body">
                     {messages.map((msg, idx) => {
@@ -296,14 +337,21 @@ const ChatBubble = () => {
                 </div>
                 
                 {suggestions.length > 0 && (
-                    <div className="chat-suggestions">
+                    <div className="chat-suggestions" style={{ 
+                        display: 'flex', 
+                        overflowX: 'auto', 
+                        whiteSpace: 'nowrap', 
+                        paddingBottom: '5px', 
+                        gap: '8px',
+                        WebkitOverflowScrolling: 'touch'
+                    }}>
                         {suggestions.map((sug, idx) => (
-                            <button key={idx} className="suggestion-chip" onClick={() => handleSend(sug)}>
+                            <button key={idx} className="suggestion-chip" onClick={() => handleSend(sug)} style={{ flexShrink: 0 }}>
                                 {sug}
                             </button>
                         ))}
-                        <button className="suggestion-chip" onClick={handleRequestSupport} style={{ border: '1px solid #1e90ff', color: '#1e90ff' }}>
-                            Gặp nhân viên CSKH
+                        <button className="suggestion-chip" onClick={() => handleSend('Chat với nhân viên')} style={{ border: '1px solid #1e90ff', color: '#1e90ff', flexShrink: 0 }}>
+                            Chat với nhân viên
                         </button>
                     </div>
                 )}

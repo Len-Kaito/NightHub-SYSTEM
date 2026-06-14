@@ -225,6 +225,9 @@ const AdminModeration = () => {
                       <div style={{ fontSize: '15px', fontWeight: 500, color: '#ff4757', margin: '10px 0', textDecoration: 'line-through' }}>
                         "{violation.content}"
                       </div>
+                      <div style={{ color: '#666', fontSize: '14px', marginBottom: '10px' }}>
+                        <strong>Lý do ẩn:</strong> {violation.reason || 'Đã xóa bình luận vi phạm'} (Bởi: {violation.moderatorId || 'Hệ thống'}) - Mã KĐ: {violation.reportId}
+                      </div>
                       <span className="badge error">Bị ẩn hệ thống</span>
                     </div>
                   </div>

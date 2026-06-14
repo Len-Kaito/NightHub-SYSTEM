@@ -392,7 +392,15 @@ const adminController = {
   getViolations: async (req, res) => {
     try {
       const result = await db.execute(
-        `SELECT MaBL, NoiDung, NgayTao, TrangThai, MaHoSo FROM VIEW_BINH_LUAN_VI_PHAM ORDER BY NgayTao DESC`,
+        `SELECT 
+            bl.MaBL, bl.NoiDung, bl.NgayTao, bl.TrangThai, bl.MaHoSo,
+            kd.MaBLKD, kd.NoiDung AS LyDoAn, kd.MaTK_KDV
+         FROM BINH_LUAN_KIEM_DUYET kd
+         LEFT JOIN BAO_CAO_VI_PHAM bc ON kd.MaBC = bc.MaBC
+         LEFT JOIN HE_THONG_DANH_DAU ht ON kd.MaHTDD = ht.MaHTDD
+         JOIN BINH_LUAN_DANH_GIA bl ON bl.MaBL = COALESCE(bc.MaBL, ht.MaBL)
+         WHERE kd.TrangThaiXL = N'Đã ẩn'
+         ORDER BY kd.MaBLKD DESC`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
       res.json(result.rows.map(r => ({
@@ -400,7 +408,10 @@ const adminController = {
         content: r.NOIDUNG,
         createdAt: r.NGAYTAO,
         status: r.TRANGTHAI,
-        profileId: r.MAHOSO
+        profileId: r.MAHOSO,
+        reportId: r.MABLKD,
+        reason: r.LYDOAN,
+        moderatorId: r.MATK_KDV
       })));
     } catch (error) {
       console.error('Lỗi lấy danh sách bình luận vi phạm:', error);
@@ -692,9 +703,12 @@ const adminController = {
       let params = {};
       
       if (role === 'CC' && staffId) {
-        // If Customer Care, only show their assigned chats or chats waiting for assignment
-        query += `WHERE (p.MaTK_CSKH = :staffId OR p.MaTK_CSKH IS NULL) `;
+        // If Customer Care, show their assigned chats OR chats waiting for assignment
+        query += `WHERE p.MaTK_CSKH = :staffId OR (p.MaTK_CSKH IS NULL AND p.TrangThai = N'Chuyển nhân viên') `;
         params.staffId = staffId;
+      } else {
+        // SysAdmin: Show all active and pending chats
+        query += `WHERE p.TrangThai IN (N'Đang chat', N'Chuyển nhân viên') `;
       }
       query += `ORDER BY p.NgayTao DESC`;
 

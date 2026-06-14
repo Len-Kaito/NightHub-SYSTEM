@@ -2,12 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquareText, Send, User, Bot, Headset, Clock, Search } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
 
+import { useUser } from '../../context/UserContext';
+
 const AdminLiveChat = () => {
   const { showToast } = useToast();
+  const { user } = useUser();
   
-  // State for Role & User Simulation
-  const [role, setRole] = useState('CC'); // 'SYS_ADMIN' or 'CC'
-  const [staffId, setStaffId] = useState('TK010'); // Default CC staff ID
+  // Real Role & Staff ID from User Context
+  const role = user?.role === 'CC' ? 'CC' : 'SYS_ADMIN'; 
+  const staffId = user?.id || '';
   
   const [sessions, setSessions] = useState([]);
   const [activeSession, setActiveSession] = useState(null);
@@ -117,25 +120,7 @@ const AdminLiveChat = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h2 style={{ fontWeight: 600, margin: 0 }}>Live Chat CSKH</h2>
         
-        {/* Development tools: Mock User Login */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(255,255,255,0.05)', padding: '8px 15px', borderRadius: '8px' }}>
-          <span style={{ fontSize: '14px', color: '#888' }}>Mô phỏng Đăng nhập:</span>
-          <select 
-            value={role} 
-            onChange={(e) => { setRole(e.target.value); setActiveSession(null); }}
-            style={{ background: '#1a1c23', color: '#fff', border: '1px solid #333', padding: '5px', borderRadius: '4px' }}
-          >
-            <option value="CC">Nhân viên CSKH</option>
-            <option value="SYS_ADMIN">Quản trị viên Hệ thống</option>
-          </select>
-          <input 
-            type="text" 
-            value={staffId} 
-            onChange={(e) => setStaffId(e.target.value)}
-            style={{ background: '#1a1c23', color: '#fff', border: '1px solid #333', padding: '5px', borderRadius: '4px', width: '80px' }}
-            title="Mã Nhân Viên"
-          />
-        </div>
+        {/* Development tools: Removed */}
       </div>
 
       <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'hidden' }}>

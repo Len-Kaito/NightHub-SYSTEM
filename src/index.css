@@ -3593,11 +3593,18 @@ header {
     display: flex;
     gap: 8px;
     overflow-x: auto;
-    scrollbar-width: none;
+    /* Hiển thị thanh cuộn */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 }
 
 .chat-suggestions::-webkit-scrollbar {
-    display: none;
+    height: 4px;
+}
+
+.chat-suggestions::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
 }
 
 .suggestion-chip {

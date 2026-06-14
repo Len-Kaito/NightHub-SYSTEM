@@ -3,18 +3,30 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Cấu hình Gemini
 const apiKey = process.env.GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+let genAI = null;
+let model = null;
+try {
+  if (apiKey) {
+    genAI = new GoogleGenerativeAI(apiKey);
+    model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  }
+} catch (e) {
+  console.warn("Gemini API initialization failed:", e.message);
+}
 
 const chatController = {
   // Lấy lịch sử chat của một hồ sơ
   getChatHistory: async (req, res) => {
     try {
       const { profileId } = req.params;
+      console.log(`[getChatHistory] called for profileId=${profileId}`);
 
       // 1. Tìm phiên chat đang hoạt động (TrangThai = 'Đang chat' hoặc mới nhất)
       const phienResult = await db.execute(
-        `SELECT MaPhien FROM PHIEN_CHAT_AI WHERE MaHoSo = :profileId ORDER BY NgayTao DESC FETCH FIRST 1 ROWS ONLY`,
+        `SELECT MaPhien FROM PHIEN_CHAT_AI 
+         WHERE MaHoSo = :profileId 
+         ORDER BY CASE WHEN TrangThai IN (N'Đang chat', N'Chuyển nhân viên') THEN 1 ELSE 2 END ASC, 
+         NgayTao DESC FETCH FIRST 1 ROWS ONLY`,
         { profileId },
         { outFormat: db.OUT_FORMAT_OBJECT }
       );
@@ -86,17 +98,10 @@ const chatController = {
       const { profileId, text } = req.body;
       if (!text || !profileId) return res.status(400).json({ message: 'Thiếu dữ liệu' });
 
-      if (!apiKey || apiKey === 'your_gemini_api_key_here') {
-        return res.json({ 
-          reply: 'Chức năng Chatbot AI đang tạm khóa do chưa cấu hình API Key. Giảng viên vui lòng thêm GEMINI_API_KEY vào file .env để sử dụng.', 
-          movies: [] 
-        });
-      }
-
       // 1. Tìm hoặc tạo phiên chat
       let maPhien;
       const phienResult = await db.execute(
-        `SELECT MaPhien FROM PHIEN_CHAT_AI WHERE MaHoSo = :profileId AND TrangThai = N'Đang chat' ORDER BY NgayTao DESC FETCH FIRST 1 ROWS ONLY`,
+        `SELECT MaPhien, MaTK_CSKH FROM PHIEN_CHAT_AI WHERE MaHoSo = :profileId AND TrangThai IN (N'Đang chat', N'Chuyển nhân viên') ORDER BY NgayTao DESC FETCH FIRST 1 ROWS ONLY`,
         { profileId },
         { outFormat: db.OUT_FORMAT_OBJECT }
       );
@@ -110,6 +115,19 @@ const chatController = {
         );
       } else {
         maPhien = phienResult.rows[0].MAPHIEN;
+        const maCskh = phienResult.rows[0].MATK_CSKH;
+        const trangThai = phienResult.rows[0].TRANGTHAI;
+
+        // If session is waiting for CC or assigned to CC, do not let AI reply
+        if (maCskh || trangThai === 'Chuyển nhân viên' || trangThai === 'Đang hỗ trợ') {
+           const userMsgId = 'TN' + Date.now().toString().slice(-13);
+           await db.execute(
+             `INSERT INTO TIN_NHAN_AI (MaTN, NoiDung, NguoiGui, MaPhien) VALUES (:id, :txt, 'USER', :phien)`,
+             { id: userMsgId, txt: text, phien: maPhien },
+             { autoCommit: true }
+           );
+           return res.json({ success: true }); // Empty response, AI doesn't reply
+        }
       }
 
       // 2. Lưu tin nhắn User
@@ -147,8 +165,23 @@ const chatController = {
         `- ${r.TENPHIM} (Mã: ${r.MAPHIM}) | Thể loại: ${r.THELOAI || 'N/A'} | Diễn viên: ${r.DIENVIEN || 'N/A'} | Đạo diễn: ${r.DAODIEN || 'N/A'} | ${r.QUOCGIA || ''} ${r.NAMSX || ''}`
       ).join('\n');
 
-      // 5. Chuẩn bị Prompt cho Gemini
-      const systemPrompt = `Bạn là NightBot — trợ lý AI thông minh của nền tảng xem phim trực tuyến Nighthub.
+      // Predefined hardcoded responses to avoid Gemini API calls for quick suggestions
+      const predefinedResponses = {
+        'làm thế nào để thay đổi mật khẩu tài khoản?': 'Bạn có thể vào Cài đặt > Tài khoản > Đổi mật khẩu. Vui lòng nhập mật khẩu hiện tại và mật khẩu mới để xác nhận.',
+        'gói vip có quyền lợi gì?': 'Xem phim không quảng cáo, chất lượng 4K và truy cập kho phim độc quyền.',
+        'làm sao để xem phim trên màn hình tivi (smart tv)?': 'Ứng dụng Nighthub hiện đã hỗ trợ cài đặt trên các nền tảng WebOS, Tizen và Android TV. Hoặc bạn có thể sử dụng tính năng Cast từ điện thoại.'
+      };
+
+      const normalizedText = text.trim().toLowerCase();
+      let aiResponseText = '';
+
+      if (predefinedResponses[normalizedText]) {
+        aiResponseText = predefinedResponses[normalizedText];
+      } else if (!model || !apiKey) {
+        aiResponseText = 'Xin lỗi, trợ lý AI hiện đang bảo trì (thiếu API Key). Vui lòng sử dụng tính năng "Chat với nhân viên" để được hỗ trợ.';
+      } else {
+        // 5. Chuẩn bị Prompt cho Gemini
+        const systemPrompt = `Bạn là NightBot — trợ lý AI thông minh của nền tảng xem phim trực tuyến Nighthub.
 
 ## HƯỚNG DẪN CHUNG
 - Trả lời ngắn gọn (tối đa 3-4 câu), thân thiện và chuyên nghiệp.
@@ -182,9 +215,15 @@ Nếu không gợi ý phim -> KHÔNG ghi thẻ [GỢI_Ý].
 Bây giờ, hãy trả lời câu hỏi sau của người dùng:
 User: ${text}`;
 
-      // 6. Gọi Gemini
-      const result = await model.generateContent(systemPrompt);
-      let aiResponseText = result.response.text();
+        try {
+          // 6. Gọi Gemini
+          const result = await model.generateContent(systemPrompt);
+          aiResponseText = result.response.text();
+        } catch (genError) {
+          console.error("Gemini Generate Error:", genError);
+          aiResponseText = 'Xin lỗi, trợ lý AI hiện đang bảo trì hoặc quá tải. Vui lòng thử lại sau hoặc "Chat với nhân viên".';
+        }
+      }
 
       // 7. Bóc tách [GỢI_Ý: ...]
       let suggestedMovieIds = [];
@@ -266,6 +305,13 @@ User: ${text}`;
 
       // Find active chat session
       let maPhien;
+      
+      // Validate profileId exists
+      const checkProfile = await db.execute(`SELECT 1 FROM HO_SO WHERE MaHoSo = :profileId`, { profileId }, { outFormat: db.OUT_FORMAT_OBJECT });
+      if (checkProfile.rows.length === 0) {
+        return res.status(400).json({ message: 'Hồ sơ không tồn tại hoặc phiên đăng nhập đã cũ. Vui lòng F5 hoặc đăng nhập lại.' });
+      }
+
       const phienResult = await db.execute(
         `SELECT MaPhien FROM PHIEN_CHAT_AI WHERE MaHoSo = :profileId AND TrangThai = N'Đang chat' ORDER BY NgayTao DESC FETCH FIRST 1 ROWS ONLY`,
         { profileId }, { outFormat: db.OUT_FORMAT_OBJECT }
@@ -275,19 +321,30 @@ User: ${text}`;
         maPhien = phienResult.rows[0].MAPHIEN;
       } else {
         // Create new session if no active session
-        const nextPCRes = await db.execute(`SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaPhien, 3))), 0) + 1 AS MAXPC FROM PHIEN_CHAT_AI`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
-        maPhien = 'PC' + String(nextPCRes.rows[0].MAXPC || 1).padStart(3, '0');
+        maPhien = 'P' + Date.now().toString().slice(-14);
         await db.execute(
           `INSERT INTO PHIEN_CHAT_AI (MaPhien, NgayTao, TrangThai, MaHoSo) VALUES (:maPhien, CURRENT_TIMESTAMP, N'Đang chat', :profileId)`,
           { maPhien, profileId }, { autoCommit: true }
         );
       }
 
+      // 1.5. Lưu tin nhắn của User ("Tôi muốn gặp nhân viên CSKH.") vào DB
+      const userMsgId = 'TN' + Date.now().toString().slice(-13);
+      await db.execute(
+        `INSERT INTO TIN_NHAN_AI (MaTN, NoiDung, NguoiGui, ThoiGian, MaPhien) VALUES (:id, :txt, 'USER', CURRENT_TIMESTAMP, :phien)`,
+        { id: userMsgId, txt: 'Tôi muốn gặp nhân viên CSKH.', phien: maPhien },
+        { autoCommit: true }
+      );
+
       // Assign to the least busy CSKH
       const cskhResult = await db.execute(`SELECT fn_LayCSKHRanhNhat() AS MACSKH FROM DUAL`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
       const maCskh = cskhResult.rows[0].MACSKH;
 
       if (maCskh) {
+        // Fetch staff name
+        const staffRes = await db.execute(`SELECT TenHT FROM TAI_KHOAN WHERE MaTK = :maCskh`, { maCskh }, { outFormat: db.OUT_FORMAT_OBJECT });
+        const tenCskh = staffRes.rows.length > 0 ? staffRes.rows[0].TENHT : maCskh;
+
         // Update session
         await db.execute(
           `UPDATE PHIEN_CHAT_AI SET MaTK_CSKH = :maCskh WHERE MaPhien = :maPhien`,
@@ -301,21 +358,58 @@ User: ${text}`;
         );
         
         // Add auto-message from system
-        const maxTNRes = await db.execute(`SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaTN, 3))), 0) + 1 AS MAXTN FROM TIN_NHAN_AI`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
-        const maTN = 'TN' + String(maxTNRes.rows[0].MAXTN || 1).padStart(4, '0');
+        const maTN = 'TN' + Date.now().toString().slice(-13);
         
         await db.execute(
           `INSERT INTO TIN_NHAN_AI (MaTN, NoiDung, NguoiGui, ThoiGian, MaPhien)
            VALUES (:maTN, :content, 'CC', CURRENT_TIMESTAMP, :maPhien)`,
-          { maTN, content: `Hệ thống đã tự động gán bạn cho nhân viên hỗ trợ [${maCskh}]. Xin vui lòng chờ trong giây lát...`, maPhien }, { autoCommit: true }
+          { maTN, content: `Nhân viên hỗ trợ [${tenCskh}] đã kết nối. Bạn có thể bắt đầu chat ngay bây giờ!`, maPhien }, { autoCommit: true }
         );
 
-        res.json({ message: 'Đã yêu cầu CSKH thành công', assignedTo: maCskh });
+        res.json({ message: 'Đã yêu cầu CSKH thành công', assignedTo: tenCskh });
       } else {
-        res.json({ message: 'Hiện tại tất cả nhân viên CSKH đều đang bận, vui lòng thử lại sau.' });
+        // No CC available, mark as waiting
+        await db.execute(
+          `UPDATE PHIEN_CHAT_AI SET TrangThai = N'Chuyển nhân viên' WHERE MaPhien = :maPhien`,
+          { maPhien }, { autoCommit: true }
+        );
+        
+        const maTN = 'TN' + Date.now().toString().slice(-13);
+        await db.execute(
+          `INSERT INTO TIN_NHAN_AI (MaTN, NoiDung, NguoiGui, ThoiGian, MaPhien)
+           VALUES (:maTN, :content, 'CC', CURRENT_TIMESTAMP, :maPhien)`,
+          { maTN, content: 'Hiện tại tất cả nhân viên CSKH đều đang bận, yêu cầu của bạn đã được đưa vào hàng đợi. Vui lòng giữ máy...', maPhien }, { autoCommit: true }
+        );
+        
+        res.json({ message: 'Hiện tại tất cả nhân viên CSKH đều đang bận, yêu cầu của bạn đã được đưa vào hàng đợi. Vui lòng giữ máy...' });
       }
     } catch (error) {
       console.error('Lỗi gọi CSKH:', error);
+      res.status(500).json({ message: 'Lỗi server', details: error.message });
+    }
+  },
+
+  endSession: async (req, res) => {
+    try {
+      const { profileId } = req.params;
+      
+      const phienResult = await db.execute(
+        `SELECT MaPhien FROM PHIEN_CHAT_AI WHERE MaHoSo = :profileId AND TrangThai IN (N'Đang chat', N'Chuyển nhân viên', N'Đang hỗ trợ') ORDER BY NgayTao DESC FETCH FIRST 1 ROWS ONLY`,
+        { profileId }, { outFormat: db.OUT_FORMAT_OBJECT }
+      );
+
+      if (phienResult.rows.length > 0) {
+        const maPhien = phienResult.rows[0].MAPHIEN;
+        await db.execute(
+          `UPDATE PHIEN_CHAT_AI SET TrangThai = N'Kết thúc' WHERE MaPhien = :maPhien`,
+          { maPhien }, { autoCommit: true }
+        );
+        res.json({ message: 'Đã kết thúc phiên chat' });
+      } else {
+        res.json({ message: 'Không có phiên chat nào đang hoạt động' });
+      }
+    } catch (error) {
+      console.error('Lỗi kết thúc phiên chat:', error);
       res.status(500).json({ message: 'Lỗi server' });
     }
   }
