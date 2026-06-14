@@ -28,16 +28,14 @@ Dự án sử dụng Oracle SQL. Bạn cần chạy file SQL có sẵn trong th�
 2. Kết nối bằng tài khoản quyền cao (mặc định là `SYSTEM` hoặc `SYS`).
 3. Chạy file `build_database.sql` (Tạo bảng, nạp dữ liệu và cấu hình View/Function/Trigger).
 
-*(Lưu ý: File `khoi_tao_user_va_role.sql` chỉ là bài tập phân quyền sinh viên nộp kèm, giảng viên **không cần chạy** file này để chạy web).*
-
 > [!IMPORTANT]
 > **Cấu hình kết nối Backend:**
 > Mặc định Backend Node.js đang sử dụng tài khoản `SYSTEM` với mật khẩu là `123456` để kết nối vào Database.
-> Nếu Oracle của giảng viên sử dụng mật khẩu khác (ví dụ `Sys12345`), giảng viên vui lòng mở file `server/.env` và sửa lại dòng `DB_PASSWORD` cho đúng với mật khẩu của máy giảng viên.
+> Nếu Oracle của bạn sử dụng mật khẩu khác (ví dụ `Sys12345`), bạn vui lòng mở file `server/.env` và sửa lại dòng `DB_PASSWORD` cho đúng với mật khẩu của máy bạn.
 
 > [!TIP]
 > **Xóa và Nạp lại dữ liệu (Reset Database):**
-> Nếu trong quá trình chấm bài giảng viên cần làm sạch Database để test lại từ đầu, giảng viên chỉ cần:
+> Nếu trong quá trình chấm bài bạn cần làm sạch Database để test lại từ đầu, bạn chỉ cần:
 > 1. Chạy file `DeleteTable.sql` để xóa toàn bộ cấu trúc cũ.
 > 2. Chạy lại file `build_database.sql` (hoặc `build_db.bat`) để nạp lại dữ liệu tươi mới.
 
