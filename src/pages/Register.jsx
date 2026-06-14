@@ -1,21 +1,33 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useUser } from '../context/UserContext';
+import { authService } from '../services/api';
 import './Auth.css';
 
 const Register = () => {
   const navigate = useNavigate();
-  const { login } = useUser();
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleRegister = (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    login();
-    // Navigate to setup or login
-    navigate('/choose-genre');
+    setError('');
+    
+    if (password !== confirmPassword) {
+      return setError('Mật khẩu xác nhận không khớp');
+    }
+
+    try {
+      await authService.register({ email, password, name, phone });
+      navigate('/login');
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
   return (
@@ -38,11 +50,20 @@ const Register = () => {
       <div className="auth-card">
         <h2 className="card-title">Đăng Ký</h2>
         <form className="auth-form" onSubmit={handleRegister}>
+          {error && <div style={{ color: '#ff4b4b', marginBottom: '15px', textAlign: 'center', fontSize: '14px', background: 'rgba(255, 75, 75, 0.1)', padding: '10px', borderRadius: '4px' }}>{error}</div>}
+          
+          <div className="input-group">
+            <span className="input-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            </span>
+            <input type="text" placeholder="Họ và tên" required value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+
           <div className="input-group">
             <span className="input-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
             </span>
-            <input type="email" placeholder="Email" required />
+            <input type="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
 
           <div className="input-group" style={{ position: 'relative' }}>
@@ -103,7 +124,7 @@ const Register = () => {
             <span className="input-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
             </span>
-            <input type="tel" placeholder="Số điện thoại" required />
+            <input type="tel" placeholder="Số điện thoại" required value={phone} onChange={(e) => setPhone(e.target.value)} />
           </div>
 
           <label className="checkbox-label register-terms">

@@ -1,34 +1,46 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import FilterModal from '../components/FilterModal';
+import HeroSlider from '../components/HeroSlider';
 import MovieRow from '../components/MovieRow';
 import MovieCardVertical from '../components/MovieCardVertical';
 import { useContent } from '../context/ContentContext';
-import { movieRows, tvShowRows, animeRows, docRows } from '../data/movieData';
+import { movieRows, tvShowRows, animeRows, docRows, movieHero, tvHero, animeHero, docHero } from '../data/movieData';
 
+// Map slug → thông tin danh mục, dùng title của row để lọc phim đã được gán danh mục
 const CATEGORY_MAP = {
-  'dien-anh': { title: 'Phim Điện Ảnh', rows: movieRows },
-  'truyen-hinh': { title: 'Phim Truyền Hình', rows: tvShowRows },
-  'hoat-hinh': { title: 'Phim Hoạt Hình', rows: animeRows },
-  'tai-lieu': { title: 'Phim Tài Liệu', rows: docRows },
+  'dien-anh': { title: 'Phim Điện Ảnh', rows: movieRows, heroIds: movieHero },
+  'truyen-hinh': { title: 'Phim Truyền Hình', rows: tvShowRows, heroIds: tvHero },
+  'hoat-hinh': { title: 'Phim Hoạt Hình', rows: animeRows, heroIds: animeHero },
+  'tai-lieu': { title: 'Phim Tài Liệu', rows: docRows, heroIds: docHero },
 };
 
 const MovieCategory = () => {
   const { category } = useParams();
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [filters, setFilters] = useState({ region: 'Tất cả', genre: 'Tất cả', year: 'Tất cả', sort: 'Phổ biến nhất' });
-  const { getMovieById } = useContent();
+  const { movies } = useContent();
 
-  const data = CATEGORY_MAP[category] || CATEGORY_MAP['dien-anh'];
+  const categoryId = category || 'dien-anh';
+  const data = CATEGORY_MAP[categoryId] || CATEGORY_MAP['dien-anh'];
+
+  // Lấy ngẫu nhiên 5 phim thuộc danh mục này làm Hero Slider
+  const heroMovies = React.useMemo(() => {
+    const categoryMovies = movies.filter(m => m.category === categoryId);
+    // Xáo trộn ngẫu nhiên (Fisher-Yates hoặc sort) và lấy 5
+    return [...categoryMovies].sort(() => 0.5 - Math.random()).slice(0, 5);
+  }, [movies, categoryId]);
 
   return (
     <>
       <Navbar onToggleFilter={() => setIsFilterActive(!isFilterActive)} />
       <FilterModal isActive={isFilterActive} onToggle={() => setIsFilterActive(!isFilterActive)} />
 
-      <main className="movie-sections" style={{ marginTop: '80px' }}>
+      {heroMovies.length > 0 && <HeroSlider images={heroMovies} />}
+
+      <main className="movie-sections" style={{ marginTop: heroMovies.length > 0 ? undefined : '80px' }}>
         <h1 className="section-title" style={{ fontSize: '28px', fontWeight: 800, marginBottom: '16px' }}>{data.title}</h1>
 
         <div className="quick-filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '32px' }}>
@@ -51,8 +63,9 @@ const MovieCategory = () => {
         </div>
 
         {data.rows.map((row, i) => {
-          const rowMovies = row.movies.map(id => getMovieById(id)).filter(Boolean);
-          if (rowMovies.length === 0) return null;
+          // Lọc phim từ Context (chứa DB movies đã được map với danh mục gốc)
+          const rowMovies = movies.filter(m => m.genres && m.genres.includes(row.title));
+          if (!rowMovies || rowMovies.length === 0) return null;
           return (
             <MovieRow key={i} title={row.title}>
               {rowMovies.map((movie, idx) => (

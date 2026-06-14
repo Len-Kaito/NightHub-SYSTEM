@@ -1,24 +1,27 @@
 import React, { useState, useRef } from 'react';
 import { useChat } from '../../context/ChatContext';
 
-const FAQ_DATA = [
-    { q: 'Làm thế nào để thay đổi mật khẩu tài khoản?', a: 'Bạn có thể vào Cài đặt > Tài khoản > Đổi mật khẩu. Vui lòng nhập mật khẩu hiện tại và mật khẩu mới để xác nhận.' },
-    { q: 'Làm sao để xem phim trên màn hình Tivi (Smart TV)?', a: 'Ứng dụng Nighthub hiện đã hỗ trợ cài đặt trên các nền tảng WebOS, Tizen và Android TV. Hoặc bạn có thể sử dụng tính năng Cast từ điện thoại.' },
-    { q: 'Hướng dẫn khắc phục sự cố tải video chậm, giật lag', a: 'Vui lòng kiểm tra lại kết nối mạng của bạn, đảm bảo tốc độ tối thiểu 5Mbps. Bạn cũng có thể thử đổi máy chủ phát trong phần tuỳ chọn trình phát video.' },
-    { q: 'Cách hủy gia hạn gói VIP tự động?', a: 'Vào Cài đặt > Gói cước & Thanh toán, cuộn xuống phần Quản lý Gói và chọn "Hủy gia hạn". Bạn vẫn được dùng đến hết chu kỳ hiện tại.' },
-    { 
-        q: 'Tôi không tìm thấy câu hỏi phù hợp với vấn đề của mình?', 
-        a: 'Đừng lo! Bạn có thể nhấn vào biểu tượng Chatbot ở góc phải màn hình để được hỗ trợ trực tuyến 24/7, hoặc sử dụng các thông tin liên hệ ở khối bên dưới.' 
-    }
-];
-
 const SupportTab = ({ isActive }) => {
     const [openIndex, setOpenIndex] = useState(null);
+    const [faqs, setFaqs] = useState([]);
+    const [showAll, setShowAll] = useState(false);
     const { setIsChatOpen, toggleBubbleEnabled } = useChat();
+
+    // Lấy dữ liệu FAQ từ API
+    React.useEffect(() => {
+        if (isActive && faqs.length === 0) {
+            fetch('/api/faq')
+                .then(res => res.json())
+                .then(data => setFaqs(data))
+                .catch(err => console.error('Lỗi khi lấy FAQ:', err));
+        }
+    }, [isActive, faqs.length]);
 
     const toggleFaq = (idx) => {
         setOpenIndex(openIndex === idx ? null : idx);
     };
+
+    const displayedFaqs = showAll ? faqs : faqs.slice(0, 5);
 
     return (
         <div className={`tab-pane ${isActive ? 'active' : ''}`}>
@@ -29,13 +32,13 @@ const SupportTab = ({ isActive }) => {
 
             <div className="setting-card">
                 <h3>CÂU HỎI THƯỜNG GẶP</h3>
-                {FAQ_DATA.map((faq, idx) => {
+                {displayedFaqs.map((faq, idx) => {
                     const isOpen = openIndex === idx;
                     return (
-                        <div key={idx} className="setting-row faq-row" style={{ flexDirection: 'column', alignItems: 'flex-start', cursor: 'pointer', borderBottom: idx === FAQ_DATA.length - 1 ? 'none' : '1px solid var(--border-color)', padding: '15px 0' }} onClick={() => toggleFaq(idx)}>
+                        <div key={faq.id || idx} className="setting-row faq-row" style={{ flexDirection: 'column', alignItems: 'flex-start', cursor: 'pointer', borderBottom: idx === displayedFaqs.length - 1 ? 'none' : '1px solid var(--border-color)', padding: '15px 0' }} onClick={() => toggleFaq(idx)}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                                 <div className="setting-row-info">
-                                    <h5 style={{ margin: 0 }}>{faq.q}</h5>
+                                    <h5 style={{ margin: 0 }}>{faq.question}</h5>
                                 </div>
                                 <div className="faq-arrow-icon" style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>
                                     <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="2">
@@ -54,12 +57,30 @@ const SupportTab = ({ isActive }) => {
                                 }}
                             >
                                 <p style={{ margin: 0, fontSize: '13.5px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                                    {faq.a}
+                                    {faq.answer}
                                 </p>
                             </div>
                         </div>
                     );
                 })}
+                {faqs.length > 5 && (
+                    <button 
+                        onClick={() => setShowAll(!showAll)}
+                        style={{
+                            marginTop: '15px',
+                            background: 'transparent',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-main)',
+                            padding: '8px 16px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            width: '100%'
+                        }}
+                    >
+                        {showAll ? 'Thu gọn' : 'Xem tất cả'}
+                    </button>
+                )}
             </div>
 
             <div className="setting-card">

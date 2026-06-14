@@ -2,20 +2,18 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useContent } from '../context/ContentContext';
 import { useUser } from '../context/UserContext';
-
-const seriesList = ['GameOfThrones', 'One Piece', 'OnePiece', 'Phineas', 'Stranger Thing', 'StrangerThing', 'The Boys', 'TheBoys', 'The Walking Dead', 'TheWalkingDead', 'True Beauty', 'TrueBeauty', 'Game of Thrones'];
-
+import { usePlayMovie } from '../hooks/usePlayMovie';
 const MovieCardHorizontal = ({ movie }) => {
   const navigate = useNavigate();
   const { addToMyList, removeFromMyList, isInMyList } = useContent();
   const { isLoggedIn } = useUser();
   const isSaved = isInMyList(movie.id);
+  const playMovie = usePlayMovie();
 
   const handlePlay = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isLoggedIn) return navigate('/login');
-    navigate(`/watch/${movie.id}`);
+    playMovie(movie.id, movie.maVP);
   };
 
   const handleInfo = (e) => {
@@ -34,9 +32,9 @@ const MovieCardHorizontal = ({ movie }) => {
   };
 
   return (
-    <Link to={isLoggedIn ? `/watch/${movie.id}` : '/login'} className="movie-card movie-card-horizontal has-info">
+    <div onClick={handlePlay} className="movie-card movie-card-horizontal has-info" style={{ cursor: 'pointer' }}>
       <div className="image-wrapper">
-        <img src={movie.posterHorizontal || movie.posterVertical || '/images/poster_doc_2.webp'} alt={movie.title} onError={e => { e.target.src = '/images/poster_doc_2.webp'; }} />
+        <img src={movie.poster ? movie.poster.replace('.jpg', ' _ ngang.jpg') : '/images/default_poster.jpg'} alt={movie.title} onError={e => { e.target.src = '/images/default_poster.jpg'; }} />
       </div>
 
       <div className="card-info">
@@ -56,8 +54,8 @@ const MovieCardHorizontal = ({ movie }) => {
         </div>
         <h4 className="card-title">{movie.title}</h4>
         
-        {movie?.title && seriesList.some(s => movie.title.toLowerCase().replace(/\s+/g, '').includes(s.toLowerCase().replace(/\s+/g, ''))) && (
-          <p className="card-episode">Tập 1</p>
+        {movie.maVP && (
+          <p className="card-episode">Tập {movie.maVP}</p>
         )}
 
         {(movie.progress !== undefined || movie.remaining) && (
@@ -71,7 +69,7 @@ const MovieCardHorizontal = ({ movie }) => {
           </div>
         )}
       </div>
-    </Link>
+    </div>
   );
 };
 

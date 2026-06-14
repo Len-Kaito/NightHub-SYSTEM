@@ -1,21 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useChat } from '../../context/ChatContext';
 import { useUser } from '../../context/UserContext';
 
 const ChatBubble = () => {
     const location = useLocation();
+    const navigate = useNavigate();
     const { isChatOpen, setIsChatOpen, isBubbleEnabled } = useChat();
-    const { isLoggedIn } = useUser();
+    const { isLoggedIn, activeProfileId } = useUser();
     
     // Hide on specific routes
-    const hiddenRoutes = ['/login', '/register', '/switch-profile', '/choose-genre', '/forgot-password'];
+    const hiddenRoutes = ['/login', '/register', '/switch-profile', '/choose-genre', '/forgot-password', '/admin'];
     const isHidden = hiddenRoutes.some(route => location.pathname.includes(route));
 
     // Chat state
-    const [messages, setMessages] = useState([
-        { text: 'Xin chào! 👋 Mình là trợ lý ảo của Nighthub. Mình có thể giúp gì cho bạn hôm nay?', sender: 'bot' }
-    ]);
+    const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const messagesEndRef = useRef(null);
 
@@ -58,36 +57,46 @@ const ChatBubble = () => {
         'Tìm phim hành động', 'Cách hủy gói VIP', 'Chi tiết về hỗ trợ kỹ thuật'
     ]);
 
-    const handleSend = (textToSend) => {
+    // Fetch chat history
+    useEffect(() => {
+        if (isLoggedIn && activeProfileId) {
+            fetch(`/api/chat/${activeProfileId}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.length === 0) {
+                        setMessages([{ text: 'Xin chào! 👋 Mình là trợ lý ảo của Nighthub. Mình có thể giúp gì cho bạn hôm nay?', sender: 'bot' }]);
+                    } else {
+                        setMessages(data);
+                    }
+                })
+                .catch(err => console.error('Lỗi khi lấy lịch sử chat:', err));
+        }
+    }, [isLoggedIn, activeProfileId]);
+
+    const handleSend = async (textToSend) => {
         const text = typeof textToSend === 'string' ? textToSend : inputValue;
-        if (!text.trim()) return;
+        if (!text.trim() || !activeProfileId) return;
         
         const newMessages = [...messages, { text, sender: 'user' }];
         setMessages(newMessages);
         setInputValue('');
-
-        // Remove suggestions after first interaction if desired, or keep them
         setSuggestions([]);
-        
-        // Show typing indicator
         setIsTyping(true);
 
-        // Mock auto-reply
-        setTimeout(() => {
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profileId: activeProfileId, text })
+            });
+            const data = await res.json();
+            setMessages(prev => [...prev, data]);
+        } catch (error) {
+            console.error('Lỗi khi gửi tin nhắn:', error);
+            setMessages(prev => [...prev, { text: 'Xin lỗi, đã có lỗi kết nối xảy ra.', sender: 'bot' }]);
+        } finally {
             setIsTyping(false);
-            let replyText = 'Cảm ơn bạn đã liên hệ. Hiện tại hệ thống đang trong quá trình nâng cấp, mình sẽ ghi nhận phản hồi của bạn nhé!';
-            
-            const lowerText = text.toLowerCase();
-            if (lowerText.includes('hành động') || lowerText.includes('phim')) {
-                replyText = 'Nighthub có rất nhiều phim hành động hấp dẫn như "John Wick 4", "Mission: Impossible" hay "Fast X". Bạn có muốn mình điều hướng đến danh mục Hành Động không?';
-            } else if (lowerText.includes('vip')) {
-                replyText = 'Để hủy gói VIP, bạn vui lòng truy cập vào Cài đặt > Gói cước & Thanh toán, sau đó cuộn xuống và chọn "Hủy gia hạn" nhé.';
-            } else if (lowerText.includes('kỹ thuật') || lowerText.includes('hỗ trợ')) {
-                replyText = 'Nếu bạn gặp lỗi giật lag, hãy thử kiểm tra lại kết nối mạng hoặc đổi server phát. Để được hỗ trợ chuyên sâu, bạn có thể gửi email đến support@nighthub.com.';
-            }
-            
-            setMessages(prev => [...prev, { text: replyText, sender: 'bot' }]);
-        }, 1500); // 1.5s delay to show typing animation
+        }
     };
 
     // Drag handlers
@@ -163,6 +172,21 @@ const ChatBubble = () => {
         }
     };
 
+    const renderBotText = (text) => {
+        if (!text) return null;
+        return text.split('\n').map((line, i) => {
+            // Bold: **text**
+            let parsed = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Italic: *text*
+            parsed = parsed.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // Bullet: - item or * item
+            if (/^[\-\*]\s/.test(parsed)) {
+                parsed = '• ' + parsed.slice(2);
+            }
+            return <p key={i} dangerouslySetInnerHTML={{ __html: parsed }} />;
+        });
+    };
+
     if (isHidden || !isBubbleEnabled || !isLoggedIn) return null;
 
     return (
@@ -191,9 +215,25 @@ const ChatBubble = () => {
                 </div>
                 <div className="chat-body">
                     {messages.map((msg, idx) => (
-                        <div key={idx} className={`chat-msg-wrapper ${msg.sender}`}>
-                            <div className={`chat-msg ${msg.sender}`}>
-                                {msg.text}
+                        <div key={msg.id || idx} className={`chat-msg-wrapper ${msg.sender === 'user' ? 'user' : 'bot'}`}>
+                            <div className={`chat-msg ${msg.sender === 'user' ? 'user' : 'bot'}`}>
+                                {msg.sender === 'bot' ? renderBotText(msg.text) : msg.text}
+                                
+                                {msg.suggestions && msg.suggestions.length > 0 && (
+                                    <div className="chat-movie-suggestions">
+                                        {msg.suggestions.map((s, i) => (
+                                            <div key={i} className="chat-movie-card" onClick={() => navigate(`/movie/${s.id}`)}>
+                                                <img src={s.poster || '/images/default_poster.jpg'} alt={s.title} />
+                                                <div className="chat-movie-info">
+                                                    <span className="chat-movie-title">{s.title}</span>
+                                                    <span className="chat-movie-badge">
+                                                        {s.requiredPlan === 'VIP' ? 'VIP' : 'Miễn phí'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}

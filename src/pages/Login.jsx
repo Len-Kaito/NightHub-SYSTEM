@@ -1,19 +1,50 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { authService } from '../services/api';
 import './Auth.css';
 
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useUser();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    login();
-    // Navigate to home after successful login
-    navigate('/');
+    setError('');
+    try {
+      const data = await authService.login(email, password);
+      login(data.token, data.user);
+      
+      // Điều hướng dựa trên vai trò
+      if (data.user.role === 'USER') {
+        navigate('/');
+      } else {
+        navigate('/admin/dashboard');
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleSocialLogin = async () => {
+    setError('');
+    try {
+      // Gọi API social-login (không cần mật khẩu, tự động đăng nhập TK013)
+      const data = await authService.socialLogin();
+      login(data.token, data.user);
+      
+      if (data.user.role === 'USER') {
+        navigate('/');
+      } else {
+        navigate('/admin/dashboard');
+      }
+    } catch (err) {
+      setError('Lỗi đăng nhập: ' + err.message);
+    }
   };
 
   return (
@@ -36,11 +67,12 @@ const Login = () => {
       <div className="auth-card">
         <h2 className="card-title">Đăng Nhập</h2>
         <form className="auth-form" onSubmit={handleLogin}>
+          {error && <div style={{ color: '#ff4b4b', marginBottom: '15px', textAlign: 'center', fontSize: '14px', background: 'rgba(255, 75, 75, 0.1)', padding: '10px', borderRadius: '4px' }}>{error}</div>}
           <div className="input-group">
             <span className="input-icon">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
             </span>
-            <input type="text" placeholder="Email hoặc số điện thoại" required />
+            <input type="text" placeholder="Email hoặc số điện thoại" required value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           
           <div className="input-group" style={{ position: 'relative' }}>
@@ -83,13 +115,13 @@ const Login = () => {
           <div className="divider"><span>Hoặc đăng nhập bằng</span></div>
           
           <div className="social-login">
-            <button type="button" className="social-btn fb" onClick={handleLogin}>
+            <button type="button" className="social-btn fb" onClick={handleSocialLogin}>
               <img src="/images/logo_fb.webp" alt="Facebook Logo" /> Đăng nhập bằng Facebook
             </button>
-            <button type="button" className="social-btn gg" onClick={handleLogin}>
+            <button type="button" className="social-btn gg" onClick={handleSocialLogin}>
               <img src="/images/logo_gg.png" alt="Google Logo" /> Đăng nhập bằng Google
             </button>
-            <button type="button" className="social-btn ap" onClick={handleLogin}>
+            <button type="button" className="social-btn ap" onClick={handleSocialLogin}>
               <img src="/images/logo_apple_white.png" alt="Apple Logo" /> Đăng nhập bằng Apple
             </button>
           </div>

@@ -5,38 +5,59 @@ import Footer from '../components/Footer';
 import FilterModal from '../components/FilterModal';
 import { useContent } from '../context/ContentContext';
 import { useUser } from '../context/UserContext';
+import { movieService, watchHistoryService } from '../services/api';
 import { homeRows } from '../data/movieData';
 import MovieCardVertical from '../components/MovieCardVertical';
 import CommentSection from '../components/CommentSection';
+import { formatDurationVN } from '../utils/format';
+import { useToast } from '../context/ToastContext';
 
 const POSTER = '/images/poster_1.jpeg';
 const DEFAULT_AVATAR = 'https://static2.vieon.vn/vieplay-image/profile_avatar/2023/03/28/9rdo8k24_asset24x.webp';
 
 const WatchMovie = () => {
   const { id } = useParams();
-  const { movies, getMovieById, getMoviesByTag, addToMyList, removeFromMyList, isInMyList } = useContent();
+  const { movies, addToMyList, removeFromMyList, isInMyList, top10Movies } = useContent();
   const { profiles, activeProfileId, isLoggedIn, showSkipIntro, autoPlayNext, subtitleSize, setSubtitleSize } = useUser();
   const currentUser = profiles?.find(p => p.id === activeProfileId) || profiles?.[0] || null;
 
-  const movie = getMovieById(id) || {
-    id: 'm_37',
-    title: 'Alice In BorderLand: Thế Giới Không Lối Thoát',
-    year: '2020',
-    age: 'T18',
-    duration: '2h 00m',
-    quality: '2K',
-    rating: '4.8/5.0',
-    description: 'Một thanh niên nghiện game và hai người bạn bị mắc kẹt ở một phiên bản kỳ lạ của Tokyo, nơi họ phải tham gia những trò chơi sinh tử nguy hiểm để sinh tồn.',
-    director: 'Shinsuke Sato',
-    cast: 'Kento Yamazaki, Tao Tsuchiya, Nijiro Murakami',
-    genres: ['Phim truyền hình'],
-    posterVertical: '/DanhMuc/Phim truyền hình/Bạn không nên bỏ lỡ/Alice In BorderLand _ Thế Giới Không Lối Thoát.jpg',
-  };
+  const [movie, setMovie] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { showToast } = useToast();
 
-  const isMovieSeries = movie ? (
-    String(movie.duration || '').toLowerCase().includes('tập') ||
-    movie.category === 'phim-truyen-hinh'
-  ) : false;
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    setLoading(true);
+    
+    const fetchMovieDetail = async () => {
+      try {
+        const normalizedId = id.replace('m_', '');
+        const dbMovie = await movieService.getMovieById(normalizedId);
+        const contextMovie = movies.find(m => m.id === id) || {};
+        
+        setMovie({
+          ...contextMovie,
+          ...dbMovie,
+          id: id,
+          videos: dbMovie.videos && dbMovie.videos.length > 0 ? dbMovie.videos : contextMovie.videos,
+          genres: dbMovie.genres && dbMovie.genres.length > 0 ? dbMovie.genres : contextMovie.genres,
+          tags: dbMovie.tags && dbMovie.tags.length > 0 ? dbMovie.tags : contextMovie.tags,
+        });
+      } catch {
+        // Fallback: dùng dữ liệu context
+        const found = movies.find(m => m.id === id);
+        if (found) setMovie(found);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (movies.length > 0) {
+      fetchMovieDetail();
+    }
+  }, [id, movies]);
+
+  const isMovieSeries = movie ? (movie.type === 'tvShow' || (movie.videos && movie.videos.length > 1)) : false;
 
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [activeEpisode, setActiveEpisode] = useState(1);
@@ -48,12 +69,18 @@ const WatchMovie = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [activeSettingsPanel, setActiveSettingsPanel] = useState('main');
   const [ccEnabled, setCcEnabled] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [ratedLocked, setRatedLocked] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [currentTimeNum, setCurrentTimeNum] = useState(0);
   const [durationNum, setDurationNum] = useState(0);
   const [isAutoPlayCancelled, setIsAutoPlayCancelled] = useState(false);
+  const [accessError, setAccessError] = useState(null);
+  
+  // Ad States
+  const [hasPlayedAd, setHasPlayedAd] = useState(false);
+  const [isAdPlaying, setIsAdPlaying] = useState(false);
+  const [adCountdown, setAdCountdown] = useState(5);
+  const adVideoRef = useRef(null);
+  
   const videoRef = useRef(null);
   const seekTimeout = useRef(null);
 
@@ -92,6 +119,50 @@ const WatchMovie = () => {
     };
   }, []);
 
+  // Kiểm tra quyền xem phim (Chỉ kiểm tra với tập VIP - Trigger Oracle sẽ bắt lỗi)
+  useEffect(() => {
+    if (!movie || !currentUser) return;
+    const currentVideo = movie.videos?.[activeEpisode - 1];
+    // Chỉ gọi API kiểm tra khi tập phim yêu cầu VIP
+    if (currentVideo?.requiredPlan === 'VIP') {
+      const checkAccess = async () => {
+        try {
+          await watchHistoryService.recordPlay(currentUser.id, currentVideo.id, 0);
+          setAccessError(null);
+        } catch (err) {
+          setAccessError(err.message || 'Bạn không có quyền xem nội dung này.');
+        }
+      };
+      checkAccess();
+    } else {
+      setAccessError(null);
+    }
+  
+    // Reset ad when changing episode or movie
+    setHasPlayedAd(false);
+    setIsAdPlaying(false);
+  }, [movie, activeEpisode, currentUser]);
+
+  useEffect(() => {
+    let interval;
+    if (isAdPlaying && adCountdown > 0) {
+      interval = setInterval(() => {
+        setAdCountdown(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isAdPlaying, adCountdown]);
+
+  const handleSkipAd = () => {
+    if (adCountdown > 0) return;
+    setIsAdPlaying(false);
+    if (adVideoRef.current) adVideoRef.current.pause();
+    if (videoRef.current) {
+      videoRef.current.play();
+      setIsPlaying(true);
+    }
+  };
+
   const scrollRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -104,8 +175,9 @@ const WatchMovie = () => {
     }
   };
 
-  const isBookmarked = isInMyList(movie.id);
+  const isBookmarked = movie ? isInMyList(movie.id) : false;
   const toggleBookmark = () => {
+    if (!isLoggedIn) return navigate('/login');
     if (isBookmarked) {
       removeFromMyList(movie.id);
     } else {
@@ -113,48 +185,12 @@ const WatchMovie = () => {
     }
   };
 
-  const relatedMovies = movies.filter(m => 
+  const relatedMovies = movie ? movies.filter(m => 
     m.id !== movie.id && 
-    (m.category === movie.category || (m.genres && movie.genres && m.genres.some(g => movie.genres.includes(g))))
-  ).slice(0, 12);
+    (m.genres && movie.genres && m.genres.some(g => movie.genres.includes(g)))
+  ).slice(0, 12) : [];
 
-  const getRandomMovies = (sourceList, count, excludeIdsSet) => {
-    const candidates = sourceList.filter(m => !excludeIdsSet.has(m.id));
-    const shuffled = [...candidates].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-  };
 
-  const top10Movies = useMemo(() => {
-    const selectedMovies = [];
-    const excludeIds = new Set([movie.id]);
-
-    const homeMovieIds = Array.from(new Set(homeRows.flatMap(row => row.movies)));
-    const homeMovies = movies.filter(m => homeMovieIds.includes(m.id));
-    getRandomMovies(homeMovies, 4, excludeIds).forEach(m => {
-      selectedMovies.push(m);
-      excludeIds.add(m.id);
-    });
-
-    const animeMovies = movies.filter(m => m.category === 'hoat-hinh');
-    getRandomMovies(animeMovies, 2, excludeIds).forEach(m => {
-      selectedMovies.push(m);
-      excludeIds.add(m.id);
-    });
-
-    const dienAnhMovies = movies.filter(m => m.category === 'phim-dien-anh');
-    getRandomMovies(dienAnhMovies, 2, excludeIds).forEach(m => {
-      selectedMovies.push(m);
-      excludeIds.add(m.id);
-    });
-
-    const truyenHinhMovies = movies.filter(m => m.category === 'phim-truyen-hinh');
-    getRandomMovies(truyenHinhMovies, 2, excludeIds).forEach(m => {
-      selectedMovies.push(m);
-      excludeIds.add(m.id);
-    });
-
-    return selectedMovies;
-  }, [movie.id, movies, homeRows]);
 
   const formatTime = (secs) => {
     if (isNaN(secs)) return '00:00';
@@ -253,14 +289,31 @@ const WatchMovie = () => {
 
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
-    const p = (videoRef.current.currentTime / videoRef.current.duration) * 100 || 0;
+    const currentT = videoRef.current.currentTime;
+    const durationT = videoRef.current.duration;
+    
+    const p = (currentT / durationT) * 100 || 0;
     setProgress(p);
-    setCurrentTime(formatTime(videoRef.current.currentTime));
-    setTotalDuration(formatTime(videoRef.current.duration));
-    setCurrentTimeNum(videoRef.current.currentTime);
-    setDurationNum(videoRef.current.duration || 0);
+    setCurrentTime(formatTime(currentT));
+    setTotalDuration(formatTime(durationT));
+    setCurrentTimeNum(currentT);
+    setDurationNum(durationT || 0);
 
-    if (autoPlayNext && isMovieSeries && !isAutoPlayCancelled && videoRef.current.duration > 0 && (videoRef.current.duration - videoRef.current.currentTime) <= 0.5) {
+    // Kích hoạt quảng cáo ở giây thứ 70
+    if (!hasPlayedAd && !isAdPlaying && currentT >= 70 && currentT < 72) {
+      setIsAdPlaying(true);
+      setHasPlayedAd(true);
+      setAdCountdown(5);
+      videoRef.current.pause();
+      setIsPlaying(false);
+      if (adVideoRef.current) {
+        adVideoRef.current.currentTime = 0;
+        adVideoRef.current.play();
+      }
+      return;
+    }
+
+    if (autoPlayNext && isMovieSeries && !isAutoPlayCancelled && durationT > 0 && (durationT - currentT) <= 0.5) {
       setActiveEpisode(prev => prev + 1);
       videoRef.current.currentTime = 0;
       videoRef.current.play();
@@ -275,21 +328,25 @@ const WatchMovie = () => {
     videoRef.current.currentTime = clampedRatio * videoRef.current.duration;
   };
 
-  const handleStarClick = (val) => {
-    if (ratedLocked) return;
-    setRating(val);
-    setRatedLocked(true);
-  };
-
-
-
-  const episodes = [
-    { id: 1, title: 'Tập 1', duration: '9m 56s' },
-    { id: 2, title: 'Tập 2', duration: '1h 3m 36s' },
-    { id: 3, title: 'Tập 3', duration: '52m 21s' },
-  ];
+  const episodes = movie?.videos || [];
 
   const ratingLabels = ['', 'Tệ', 'Tạm được', 'Bình thường', 'Hay', 'Tuyệt vời'];
+
+  if (loading) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>Đang tải thông tin phim...</div>;
+  if (!movie) return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>Không tìm thấy phim.</div>;
+
+  const currentVideo = episodes.find(ep => ep.episodeNumber === activeEpisode) || episodes[0];
+
+  const handleSidebarEpisodeClick = async (ep) => {
+    if (ep.requiredPlan === 'VIP' && currentUser) {
+      try {
+        await watchHistoryService.recordPlay(currentUser.id, ep.id, 0);
+      } catch (err) {
+        return showToast(err.message || 'Nội dung này yêu cầu gói VIP.');
+      }
+    }
+    setActiveEpisode(ep.episodeNumber);
+  };
 
   return (
     <>
@@ -303,11 +360,54 @@ const WatchMovie = () => {
 
             {/* VIDEO PLAYER */}
             <div className={`player-wrapper ${isIdle ? 'is-idle' : ''}`} id="playerWrapper">
+              {accessError && (
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', textAlign: 'center', padding: '2rem' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#e50914" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '1rem' }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                  <h2 style={{ fontSize: '2rem', marginBottom: '1rem', fontWeight: 'bold' }}>Rất tiếc!</h2>
+                  <p style={{ fontSize: '1.2rem', color: '#ccc', marginBottom: '2rem' }}>{accessError}</p>
+                  <button onClick={() => window.history.back()} style={{ padding: '0.8rem 2rem', fontSize: '1.1rem', backgroundColor: '#e50914', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Quay lại</button>
+                </div>
+              )}
+              
+              {isAdPlaying && (
+                <div className="ad-overlay" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 50, backgroundColor: '#000' }}>
+                  <video 
+                    ref={adVideoRef} 
+                    src="/video/qc.mp4" 
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    onEnded={handleSkipAd}
+                    autoPlay
+                    disablePictureInPicture
+                    disableRemotePlayback
+                  />
+                  <button 
+                    className="btn-skip-intro" 
+                    style={{ 
+                      position: 'absolute', 
+                      bottom: '80px', 
+                      right: '25px', 
+                      zIndex: 51, 
+                      padding: '10px 20px', 
+                      background: adCountdown > 0 ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.7)', 
+                      color: adCountdown > 0 ? '#ccc' : '#fff', 
+                      border: '1px solid rgba(255,255,255,0.3)', 
+                      borderRadius: '4px', 
+                      cursor: adCountdown > 0 ? 'not-allowed' : 'pointer', 
+                      fontWeight: 'bold' 
+                    }}
+                    onClick={handleSkipAd}
+                    disabled={adCountdown > 0}
+                  >
+                    Bỏ qua quảng cáo {adCountdown > 0 ? `(${adCountdown})` : ''}
+                  </button>
+                </div>
+              )}
+
               <video
                 ref={videoRef}
                 className="main-video"
-                src="/video/videoplayback.mp4"
-                poster={movie.backdropUrl || movie.posterHorizontal || POSTER}
+                src={"/video/videoplayback.mp4"}
+                poster={movie.poster ? movie.poster.replace('.jpg', ' _ ngang.jpg') : POSTER}
                 onTimeUpdate={handleTimeUpdate}
                 disablePictureInPicture
                 disableRemotePlayback
@@ -540,7 +640,34 @@ const WatchMovie = () => {
             {/* THÔNG TIN PHIM DƯỚI VIDEO */}
             <div className="movie-header">
               <div className="movie-info">
-                <h1>{movie.title}</h1>
+                <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {movie.title}
+                  {currentVideo?.requiredPlan === 'VIP' && (
+                    <span style={{ 
+                      padding: '2px 8px', 
+                      background: 'linear-gradient(135deg, #FFD700, #FDB931)', 
+                      color: '#000', 
+                      fontSize: '14px', 
+                      borderRadius: '4px', 
+                      fontWeight: 'bold',
+                      textShadow: 'none',
+                      whiteSpace: 'nowrap'
+                    }}>VIP</span>
+                  )}
+                </h1>
+                
+                <div className="detail-meta" style={{ marginTop: '10px' }}>
+                  {movie.year && <><span className="meta-item">{movie.year}</span><span className="meta-separator">&middot;</span></>}
+                  {movie.country && <><span className="meta-item">{movie.country}</span><span className="meta-separator">&middot;</span></>}
+                  {movie.format && <><span className="meta-item">{movie.format}</span><span className="meta-separator">&middot;</span></>}
+                  {movie.totalEpisodes && <><span className="meta-item">{movie.totalEpisodes} Tập</span><span className="meta-separator">&middot;</span></>}
+                  {movie.rating >= 0 && (
+                    <span className="meta-item meta-rating" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                      {Number(movie.rating > 0 ? movie.rating : 5).toFixed(1)}/5.0
+                      <svg className="star-icon" style={{ marginLeft: '4px', fill: '#FFD700', width: '16px', height: '16px' }} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" /></svg>
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="movie-actions">
@@ -566,31 +693,6 @@ const WatchMovie = () => {
 
             {/* ĐÁNH GIÁ + PHIM LIÊN QUAN */}
             <div className="interaction-section">
-              <div className="rating-related-wrapper">
-
-                {/* BOX ĐÁNH GIÁ */}
-                <div className="rating-box">
-                  <h3>Đánh giá phim</h3>
-                  <div className="rating-score">{movie.rating?.split('/')[0] || '4.9'}</div>
-                  <div className={`stars-container ${ratedLocked ? 'locked' : ''}`}>
-                    {[5,4,3,2,1].map(val => (
-                      <span
-                        key={val}
-                        data-val={val}
-                        className={ratedLocked && val <= rating ? 'active' : ''}
-                        onClick={() => handleStarClick(val)}
-                      >★</span>
-                    ))}
-                  </div>
-                  <div className="rating-text" style={ratedLocked ? { color: 'var(--star-color)', fontWeight: 'bold' } : {}}>
-                    {ratedLocked ? (
-                      <>Bạn đã đánh giá <b>{rating} sao</b></>
-                    ) : (
-                      'Click vào sao để đánh giá'
-                    )}
-                  </div>
-                </div>
-
                 {/* PHIM CÓ THỂ BẠN SẼ THÍCH */}
                 <div className="related-box">
                   <h3>Có thể bạn sẽ thích</h3>
@@ -612,7 +714,6 @@ const WatchMovie = () => {
                     )}
                   </div>
                 </div>
-              </div>
 
               {/* BÌNH LUẬN */}
               <CommentSection movieId={movie.id} limit={8} />
@@ -631,20 +732,32 @@ const WatchMovie = () => {
                   {episodes.map(ep => (
                     <div
                       key={ep.id}
-                      className={`episode-item ${activeEpisode === ep.id ? 'active' : ''}`}
-                      onClick={() => setActiveEpisode(ep.id)}
+                      className={`episode-item ${activeEpisode === ep.episodeNumber ? 'active' : ''}`}
+                      onClick={() => handleSidebarEpisodeClick(ep)}
                     >
                       <img
-                        src={movie.posterHorizontal || movie.backdropUrl || POSTER}
-                        alt={`Ep ${ep.id}`}
+                        src={movie.poster || POSTER}
+                        alt={`Ep ${ep.episodeNumber}`}
                         className="ep-img"
                         onError={e => { e.target.src = POSTER; }}
                       />
                       <div className="ep-info">
-                        <div className="ep-title">Tập {ep.id} {activeEpisode === ep.id && '(Đang xem)'}</div>
-                        <div className="ep-duration">{ep.duration}</div>
+                        <div className="ep-title">Tập {ep.episodeNumber} {activeEpisode === ep.episodeNumber && '(Đang xem)'}</div>
+                        <div className="ep-duration">
+                          {formatDurationVN(ep.duration)}
+                          {ep.requiredPlan === 'VIP' && <span style={{ 
+                      padding: '2px 8px', 
+                      background: 'linear-gradient(135deg, #FFD700, #FDB931)', 
+                      color: '#000', 
+                      fontSize: '10px', 
+                      borderRadius: '4px', 
+                      fontWeight: 'bold',
+                      textShadow: 'none',
+                      whiteSpace: 'nowrap'
+                    }}>VIP</span>}
+                        </div>
                       </div>
-                      {activeEpisode === ep.id && (
+                      {activeEpisode === ep.episodeNumber && (
                         <svg className="ep-playing-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                       )}
                     </div>
@@ -654,7 +767,7 @@ const WatchMovie = () => {
             ) : (
               <>
                 <div className="episode-header">
-                  <span className="episode-title" style={{ fontSize: '18px', fontWeight: 'bold' }}>Phim đề xuất cho bạn</span>
+                  <span className="episode-title" style={{ fontSize: '18px', fontWeight: 'bold' }}>Top 10 phim thịnh hành</span>
                 </div>
                 <div className="episode-list" style={{ paddingRight: '5px', overflowY: 'auto', flex: 1 }}>
                   {top10Movies.map((m, index) => (
@@ -693,7 +806,7 @@ const WatchMovie = () => {
                           {m.title}
                         </div>
                         <div className="ep-duration" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {m.year} &bull; {m.age} &bull; {m.duration} &bull; {m.quality}
+                          {[m.year, m.age, m.duration, m.quality].filter(Boolean).join(' • ')}
                         </div>
                       </div>
                     </a>

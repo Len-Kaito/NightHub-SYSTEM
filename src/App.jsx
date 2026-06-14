@@ -25,6 +25,17 @@ import ChatBubble from './components/ui/ChatBubble';
 import ScrollToTop from './components/ScrollToTop';
 import './index.css';
 
+// Admin Pages
+import AdminLayout from './components/admin/AdminLayout';
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminMovies from './pages/admin/AdminMovies';
+import AdminAds from './pages/admin/AdminAds';
+import AdminModeration from './pages/admin/AdminModeration';
+import AdminUsers from './pages/admin/AdminUsers';
+import AdminLiveChat from './pages/admin/AdminLiveChat';
+import AdminLogs from './pages/admin/AdminLogs';
+import { Navigate } from 'react-router-dom';
+
 function App() {
   return (
     <ThemeProvider>
@@ -52,6 +63,19 @@ function App() {
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/choose-genre" element={<ChooseGenre />} />
                   <Route path="/search" element={<SearchResults />} />
+                  
+                  {/* ADMIN ROUTES */}
+                  <Route path="/admin" element={<AdminLayout />}>
+                    <Route index element={<Navigate to="dashboard" replace />} />
+                    <Route path="dashboard" element={<AdminDashboard />} />
+                    <Route path="movies" element={<AdminMovies />} />
+                    <Route path="ads" element={<AdminAds />} />
+                    <Route path="moderation" element={<AdminModeration />} />
+                    <Route path="chat" element={<AdminLiveChat />} />
+                    <Route path="users" element={<AdminUsers />} />
+                    <Route path="logs" element={<AdminLogs />} />
+                  </Route>
+
                   <Route path="*" element={<Home />} />
                 </Routes>
                 <ChatBubble />

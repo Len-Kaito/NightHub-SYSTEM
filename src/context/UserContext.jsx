@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authService, profileService } from '../services/api';
 
 export const AVATARS = [
   'https://static2.vieon.vn/vieplay-image/profile_avatar/2023/03/28/9rdo8k24_asset24x.webp',
@@ -17,124 +18,134 @@ const INITIAL_PROFILES = [
 export const UserContext = createContext(null);
 
 export const UserProvider = ({ children }) => {
-    const [profiles, setProfiles] = useState(() => {
-        const saved = localStorage.getItem('nighthub_profiles');
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                // Migration: đổi tên cũ thành tên mới
-                const migrated = parsed.map(p =>
-                    p.name === 'Nguyễn Hoàng Nam' ? { ...p, name: 'Nguyễn Văn A' } : p
-                );
-                return migrated;
-            } catch (e) {
-                return INITIAL_PROFILES;
-            }
-        }
-        return INITIAL_PROFILES;
+    // --- AUTHENTICATION STATE ---
+    const [user, setUser] = useState(() => {
+        const saved = localStorage.getItem('nighthub_user');
+        return saved ? JSON.parse(saved) : null;
     });
 
+    const [isLoggedIn, setIsLoggedIn] = useState(() => !!localStorage.getItem('nighthub_jwt'));
+
+    const login = (token, userData) => {
+        localStorage.setItem('nighthub_jwt', token);
+        localStorage.setItem('nighthub_user', JSON.stringify(userData));
+        setUser(userData);
+        setIsLoggedIn(true);
+    };
+
+    const logout = () => {
+        localStorage.removeItem('nighthub_jwt');
+        localStorage.removeItem('nighthub_user');
+        setUser(null);
+        setIsLoggedIn(false);
+    };
+
+    // --- PROFILES STATE (Phase 4) ---
+    const [profiles, setProfiles] = useState([]);
+    
     const [activeProfileId, setActiveProfileIdState] = useState(() => {
-        const saved = localStorage.getItem('nighthub_active_profile_id');
-        return saved ? parseInt(saved, 10) : INITIAL_PROFILES[0].id;
+        return localStorage.getItem('nighthub_active_profile_id') || null;
     });
 
-    const [isLoggedIn, setIsLoggedIn] = useState(() => {
-        const saved = localStorage.getItem('nighthub_is_logged_in');
-        return saved === 'true';
-    });
+    const loadProfiles = async () => {
+        try {
+            const data = await profileService.getProfiles();
+            setProfiles(data);
+            if (data.length > 0) {
+                const current = localStorage.getItem('nighthub_active_profile_id');
+                if (!current || !data.find(p => p.id === current)) {
+                    setActiveProfileIdState(data[0].id);
+                }
+            }
+        } catch (err) {
+            console.error('Lỗi khi tải danh sách hồ sơ:', err);
+        }
+    };
 
+    // Validate token on initial load
+    useEffect(() => {
+        if (isLoggedIn) {
+            authService.getMe()
+                .then(data => {
+                    setUser(data);
+                    localStorage.setItem('nighthub_user', JSON.stringify(data));
+                    loadProfiles(); // Tải profile ngay sau khi đăng nhập
+                })
+                .catch(err => {
+                    console.error('Session expired or invalid token:', err);
+                    logout();
+                });
+        } else {
+            setProfiles([]);
+            setActiveProfileIdState(null);
+        }
+    }, [isLoggedIn]);
+
+    // --- PLAYER SETTINGS ---
     const [showSkipIntro, setShowSkipIntro] = useState(() => {
         const saved = localStorage.getItem('nighthub_skip_intro');
-        return saved !== 'false'; // default true
+        return saved !== 'false';
     });
 
     const [autoPlayNext, setAutoPlayNext] = useState(() => {
         const saved = localStorage.getItem('nighthub_autoplay_next');
-        return saved !== 'false'; // default true
+        return saved !== 'false';
     });
 
     const [subtitleSize, setSubtitleSize] = useState(() => {
         return localStorage.getItem('nighthub_subtitle_size') || 'medium';
     });
 
-    const login = () => {
-        setIsLoggedIn(true);
-        localStorage.setItem('nighthub_is_logged_in', 'true');
-    };
-
-    const logout = () => {
-        setIsLoggedIn(false);
-        localStorage.setItem('nighthub_is_logged_in', 'false');
-    };
-
-    // Backwards compatibility
-    const [currentAvatar, setCurrentAvatarState] = useState(INITIAL_PROFILES[0].avatarUrl);
+    // Backwards compatibility for avatar
+    const [currentAvatar, setCurrentAvatarState] = useState('');
 
     useEffect(() => {
-        localStorage.setItem('nighthub_profiles', JSON.stringify(profiles));
-    }, [profiles]);
-
-    useEffect(() => {
-        localStorage.setItem('nighthub_active_profile_id', activeProfileId);
-        const activeProfile = profiles.find(p => p.id === activeProfileId);
-        if (activeProfile) {
-            setCurrentAvatarState(activeProfile.avatarUrl);
-            localStorage.setItem('nighthub_avatar', activeProfile.avatarUrl);
+        if (activeProfileId) {
+            localStorage.setItem('nighthub_active_profile_id', activeProfileId);
+            const activeProfile = profiles.find(p => p.id === activeProfileId);
+            if (activeProfile) {
+                setCurrentAvatarState(activeProfile.avatarUrl);
+                localStorage.setItem('nighthub_avatar', activeProfile.avatarUrl);
+            }
         }
     }, [activeProfileId, profiles]);
 
-    const setAvatar = (url) => {
-        // Backwards compatibility, also updates active profile
-        setCurrentAvatarState(url);
-        localStorage.setItem('nighthub_avatar', url);
-        setProfiles(prev => prev.map(p => p.id === activeProfileId ? { ...p, avatarUrl: url } : p));
+    const setAvatar = async (url) => {
+        if (activeProfileId) {
+            await updateProfile(activeProfileId, { avatarUrl: url });
+        }
     };
 
-    useEffect(() => {
-        localStorage.setItem('nighthub_skip_intro', showSkipIntro);
-    }, [showSkipIntro]);
-
-    useEffect(() => {
-        localStorage.setItem('nighthub_autoplay_next', autoPlayNext);
-    }, [autoPlayNext]);
-
-    useEffect(() => {
-        localStorage.setItem('nighthub_subtitle_size', subtitleSize);
-    }, [subtitleSize]);
+    useEffect(() => { localStorage.setItem('nighthub_skip_intro', showSkipIntro); }, [showSkipIntro]);
+    useEffect(() => { localStorage.setItem('nighthub_autoplay_next', autoPlayNext); }, [autoPlayNext]);
+    useEffect(() => { localStorage.setItem('nighthub_subtitle_size', subtitleSize); }, [subtitleSize]);
 
     const switchProfile = (id) => {
         const profile = profiles.find(p => p.id === id);
-        if (profile) {
-            setActiveProfileIdState(id);
-        }
+        if (profile) setActiveProfileIdState(id);
     };
 
-    const addProfile = (profileData) => {
-        setProfiles(prev => [...prev, profileData]);
+    const addProfile = async (profileData) => {
+        await profileService.createProfile(profileData);
+        await loadProfiles();
     };
 
-    const updateProfile = (id, updatedData) => {
-        setProfiles(prev => prev.map(p => p.id === id ? { ...p, ...updatedData } : p));
+    const updateProfile = async (id, updatedData) => {
+        await profileService.updateProfile(id, updatedData);
+        await loadProfiles();
     };
 
-    const deleteProfile = (id) => {
-        setProfiles(prev => prev.filter(p => p.id !== id));
-        if (activeProfileId === id) {
-            // Switch to first available profile if current is deleted
-            const remaining = profiles.filter(p => p.id !== id);
-            if (remaining.length > 0) {
-                setActiveProfileIdState(remaining[0].id);
-            }
-        }
+    const deleteProfile = async (id) => {
+        await profileService.deleteProfile(id);
+        await loadProfiles();
     };
 
     return (
         <UserContext.Provider value={{ 
-            currentAvatar, setAvatar, // Backward compatibility
+            user, isLoggedIn, login, logout,
+            currentAvatar, setAvatar,
             profiles, activeProfileId, 
             switchProfile, addProfile, updateProfile, deleteProfile,
-            isLoggedIn, login, logout,
             showSkipIntro, setShowSkipIntro,
             autoPlayNext, setAutoPlayNext,
             subtitleSize, setSubtitleSize

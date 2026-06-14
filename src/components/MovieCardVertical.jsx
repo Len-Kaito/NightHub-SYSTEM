@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useContent } from '../context/ContentContext';
 import { useUser } from '../context/UserContext';
+import { usePlayMovie } from '../hooks/usePlayMovie';
 
 const ageBadgeLabels = ['K', 'T13', 'T16', 'T18', 'P'];
 const ageTooltips = {
@@ -17,6 +18,7 @@ const MovieCardVertical = ({ movie, index, isTop10, showMatch }) => {
   const { addToMyList, removeFromMyList, isInMyList } = useContent();
   const { isLoggedIn } = useUser();
   const isSaved = isInMyList(movie.id);
+  const playMovie = usePlayMovie();
 
   const handleToggleList = (e) => {
     e.preventDefault();
@@ -29,8 +31,7 @@ const MovieCardVertical = ({ movie, index, isTop10, showMatch }) => {
   const handlePlay = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isLoggedIn) return navigate('/login');
-    navigate(`/watch/${movie.id}`);
+    playMovie(movie.id);
   };
 
   const handleInfo = (e) => {
@@ -63,6 +64,8 @@ const MovieCardVertical = ({ movie, index, isTop10, showMatch }) => {
   );
 
   const ageBadge = movie.age || (movie.badges && movie.badges.find(b => ageBadgeLabels.includes(b.label)))?.label;
+  const primaryTag = movie.tags?.find(t => t.name?.toLowerCase() === ageBadge?.toLowerCase());
+  const badgeTooltip = primaryTag?.description || primaryTag?.MoTa || ageTooltips[ageBadge] || ageBadge;
 
   const commonClasses = `movie-card has-info ${isTop10 ? 'top10-card' : 'movie-card-vertical'}`;
 
@@ -70,9 +73,11 @@ const MovieCardVertical = ({ movie, index, isTop10, showMatch }) => {
     <>
       <div className="image-wrapper">
         {ageBadge && (
-          <div className="poster-age-badge" title={ageTooltips[ageBadge] || ageBadge}>{ageBadge}</div>
+          <div className="poster-age-badge" style={{ pointerEvents: 'auto' }} title={badgeTooltip || 'Không có mô tả'}>
+            {ageBadge}
+          </div>
         )}
-        <img src={movie.posterVertical || '/images/poster_1.jpeg'} alt={movie.title} onError={e => { e.target.src = '/images/poster_1.jpeg'; }} />
+        <img src={movie.poster || '/images/default_poster.jpg'} alt={movie.title} onError={e => { e.target.src = '/images/default_poster.jpg'; }} />
       </div>
       <div className="card-info">
         <div className="card-actions">
@@ -90,7 +95,7 @@ const MovieCardVertical = ({ movie, index, isTop10, showMatch }) => {
           </button>
         </div>
         <div className="card-meta-info">
-          {showMatch && <span className="card-meta-match">98% phù hợp</span>}
+          {showMatch && movie.matchScore && <span className="card-meta-match">{Math.round(movie.matchScore)}% phù hợp</span>}
           {movie.quality && <span className="card-meta-quality">{movie.quality}</span>}
           {movie.duration && <span className="card-meta-duration">{movie.duration}</span>}
         </div>
@@ -102,7 +107,7 @@ const MovieCardVertical = ({ movie, index, isTop10, showMatch }) => {
 
   if (isTop10) {
     return (
-      <div className="top10-item" onClick={() => isLoggedIn ? navigate(`/watch/${movie.id}`) : navigate('/login')}>
+      <div className="top10-item" onClick={handlePlay} style={{ cursor: 'pointer' }}>
         <TopNumberSVG number={index + 1} />
         <div className={commonClasses}>
           <InnerContent />
@@ -112,9 +117,9 @@ const MovieCardVertical = ({ movie, index, isTop10, showMatch }) => {
   }
 
   return (
-    <Link to={isLoggedIn ? `/watch/${movie.id}` : '/login'} className={commonClasses} style={{ textDecoration: 'none' }}>
+    <div className={commonClasses} onClick={handlePlay} style={{ cursor: 'pointer' }}>
       <InnerContent />
-    </Link>
+    </div>
   );
 };
 

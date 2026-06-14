@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../context/ToastContext';
+import { authService } from '../services/api';
 import './Auth.css';
 
 const ForgotPassword = () => {
@@ -13,20 +14,60 @@ const ForgotPassword = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirmPwd, setShowConfirmPwd] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleNextStep1 = (e) => {
+  useEffect(() => {
+    let timer;
+    if (countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [countdown]);
+
+  const handleNextStep1 = async (e) => {
     e.preventDefault();
     if (emailOrPhone.trim()) {
-      setStep(2);
+      setIsLoading(true);
+      try {
+        await authService.forgotPassword(emailOrPhone);
+        setStep(2);
+        setCountdown(60); // Start 60s countdown
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
-  const handleNextStep2 = (e) => {
+  const handleNextStep2 = async (e) => {
     e.preventDefault();
     if (otp.join('').length === 6) {
-      setStep(3);
+      setIsLoading(true);
+      try {
+        await authService.verifyOtp(emailOrPhone, otp.join(''));
+        setStep(3);
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       showToast("Vui lòng nhập đủ 6 số OTP!", true);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (countdown > 0) return;
+    try {
+      await authService.forgotPassword(emailOrPhone);
+      setCountdown(60);
+      showToast('Đã gửi lại mã OTP!');
+    } catch (err) {
+      showToast(err.message, true);
     }
   };
 
@@ -36,7 +77,6 @@ const ForgotPassword = () => {
     newOtp[index] = element.value;
     setOtp(newOtp);
 
-    // Focus next input
     if (element.nextSibling && element.value !== '') {
       element.nextSibling.focus();
     }
@@ -48,11 +88,19 @@ const ForgotPassword = () => {
     }
   };
 
-  const handleResetPassword = (e) => {
+  const handleResetPassword = async (e) => {
     e.preventDefault();
     if (newPassword && newPassword === confirmPassword) {
-      showToast("Cập nhật mật khẩu thành công!");
-      navigate('/login');
+      setIsLoading(true);
+      try {
+        await authService.resetPassword(emailOrPhone, newPassword);
+        showToast("Cập nhật mật khẩu thành công!");
+        navigate('/login');
+      } catch (err) {
+        showToast(err.message, true);
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       showToast("Mật khẩu không khớp!", true);
     }
@@ -89,14 +137,16 @@ const ForgotPassword = () => {
                 </span>
                 <input 
                   type="text" 
-                  placeholder="Email hoặc số điện thoại" 
+                  placeholder="Email" 
                   value={emailOrPhone}
                   onChange={(e) => setEmailOrPhone(e.target.value)}
                   required 
                 />
               </div>
               
-              <button type="submit" className="auth-btn-submit" style={{ marginTop: '10px' }}>Tiếp Tục</button>
+              <button type="submit" className="auth-btn-submit" style={{ marginTop: '10px' }} disabled={isLoading}>
+                {isLoading ? 'Đang xử lý...' : 'Tiếp Tục'}
+              </button>
             </form>
           </>
         )}
@@ -135,10 +185,17 @@ const ForgotPassword = () => {
                 ))}
               </div>
               
-              <button type="submit" className="auth-btn-submit" style={{ marginTop: '10px' }}>Xác Thực</button>
+              <button type="submit" className="auth-btn-submit" style={{ marginTop: '10px' }} disabled={isLoading}>
+                {isLoading ? 'Đang xử lý...' : 'Xác Thực'}
+              </button>
               
               <div className="auth-nav-text" style={{ marginTop: '15px' }}>
-                Chưa nhận được mã? <a href="#" onClick={(e) => { e.preventDefault(); showToast('Đã gửi lại mã!'); }}>Gửi lại</a>
+                Chưa nhận được mã?{' '}
+                {countdown > 0 ? (
+                  <span style={{ color: 'var(--text-muted)' }}>Gửi lại sau {countdown}s</span>
+                ) : (
+                  <a href="#" onClick={(e) => { e.preventDefault(); handleResendOtp(); }}>Gửi lại</a>
+                )}
               </div>
             </form>
           </>
@@ -205,7 +262,9 @@ const ForgotPassword = () => {
                 )}
               </div>
               
-              <button type="submit" className="auth-btn-submit" style={{ marginTop: '10px' }}>Cập Nhật Mật Khẩu</button>
+              <button type="submit" className="auth-btn-submit" style={{ marginTop: '10px' }} disabled={isLoading}>
+                {isLoading ? 'Đang xử lý...' : 'Cập Nhật Mật Khẩu'}
+              </button>
             </form>
           </>
         )}

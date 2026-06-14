@@ -32,7 +32,6 @@ const SwitchProfile = () => {
   const [editingId, setEditingId] = useState(null);
   const [setupName, setSetupName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATARS[0]);
-  const [setupGender, setSetupGender] = useState('nam');
   const [isKids, setIsKids] = useState(false);
   const [tempPin, setTempPin] = useState(null);
   const [showAvatarSelection, setShowAvatarSelection] = useState(false);
@@ -104,9 +103,8 @@ const SwitchProfile = () => {
       setSelectedAvatar(profile.avatarUrl);
       setIsKids(profile.isKids);
       setTempPin(profile.pin);
-      setSetupGender(profile.gender || 'nam');
       // Lưu lại giá trị ban đầu để so sánh
-      originalRef.current = { name: profile.name, avatarUrl: profile.avatarUrl, gender: profile.gender || 'nam', pin: profile.pin };
+      originalRef.current = { name: profile.name, avatarUrl: profile.avatarUrl, pin: profile.pin };
     } else {
       setSetupMode('create');
       setEditingId(null);
@@ -114,7 +112,6 @@ const SwitchProfile = () => {
       setSelectedAvatar(AVATARS[0]);
       setIsKids(false);
       setTempPin(null);
-      setSetupGender('nam');
       originalRef.current = null;
     }
     setView('setup');
@@ -126,23 +123,26 @@ const SwitchProfile = () => {
     : setupName.trim().length > 0 && originalRef.current && (
         setupName.trim() !== originalRef.current.name ||
         selectedAvatar !== originalRef.current.avatarUrl ||
-        setupGender !== originalRef.current.gender ||
         tempPin !== originalRef.current.pin
       );
 
-  const submitSetupProfile = () => {
+  const submitSetupProfile = async () => {
     if (!setupName.trim()) {
       setNameError("Vui lòng nhập tên hồ sơ trước khi lưu!");
       return;
     }
-    if (setupMode === 'create') {
-      addProfile({ id: Date.now(), name: setupName, avatarUrl: selectedAvatar, gender: setupGender, isKids, pin: tempPin });
-      showToast('Đã tạo hồ sơ mới thành công!');
-    } else {
-      updateProfile(editingId, { name: setupName, avatarUrl: selectedAvatar, gender: setupGender, pin: tempPin });
-      showToast('Lưu hồ sơ thành công!');
+    try {
+      if (setupMode === 'create') {
+        await addProfile({ name: setupName, avatarUrl: selectedAvatar, isKids, pin: tempPin });
+        showToast('Đã tạo hồ sơ mới thành công!');
+      } else {
+        await updateProfile(editingId, { name: setupName, avatarUrl: selectedAvatar, pin: tempPin });
+        showToast('Lưu hồ sơ thành công!');
+      }
+      setView('home');
+    } catch (err) {
+      setNameError("Có lỗi xảy ra khi lưu hồ sơ.");
     }
-    setView('home');
   };
 
   const requestDelete = () => {
@@ -150,12 +150,16 @@ const SwitchProfile = () => {
     setView('delete-confirm');
   };
 
-  const confirmDeleteProfile = () => {
+  const confirmDeleteProfile = async () => {
     if (profileToDelete) {
-      deleteProfile(profileToDelete);
-      setProfileToDelete(null);
-      showToast('Đã xóa hồ sơ thành công!', 'success');
-      setView('home');
+      try {
+        await deleteProfile(profileToDelete);
+        setProfileToDelete(null);
+        showToast('Đã xóa hồ sơ thành công!', 'success');
+        setView('home');
+      } catch (err) {
+        setToast({ msg: "Không thể xóa hồ sơ", type: 'error' });
+      }
     }
   };
 
@@ -351,14 +355,7 @@ const SwitchProfile = () => {
                 </div>
               )}
 
-              <div className="form-group">
-                <label className="form-label">Giới tính</label>
-                <div className="radio-group">
-                  <label className="radio-item"><input type="radio" name="gender" value="nam" checked={setupGender === 'nam'} onChange={() => setSetupGender('nam')} /> Nam</label>
-                  <label className="radio-item"><input type="radio" name="gender" value="nu" checked={setupGender === 'nu'} onChange={() => setSetupGender('nu')} /> Nữ</label>
-                  <label className="radio-item"><input type="radio" name="gender" value="khac" checked={setupGender === 'khac'} onChange={() => setSetupGender('khac')} /> Khác</label>
-                </div>
-              </div>
+
 
               <div className="toggle-box" style={{ marginBottom: '16px' }}>
                 <div className="toggle-info">

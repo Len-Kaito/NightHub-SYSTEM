@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
@@ -8,6 +8,7 @@ import MovieRow from '../components/MovieRow';
 import MovieCardVertical from '../components/MovieCardVertical';
 import { useContent } from '../context/ContentContext';
 import { useUser } from '../context/UserContext';
+import { profileService } from '../services/api';
 import './Profile.css';
 import './SwitchProfile.css';
 
@@ -30,12 +31,12 @@ const Profile = () => {
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [showAllSaved, setShowAllSaved] = useState(false);
+  const [vipStatus, setVipStatus] = useState(null);
 
   // Edit modal state
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
-  const [editGender, setEditGender] = useState('nam');
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [nameError, setNameError] = useState('');
 
@@ -53,27 +54,45 @@ const Profile = () => {
   const { profiles, activeProfileId, updateProfile } = useUser();
   const activeProfile = profiles.find(p => p.id === activeProfileId) || profiles[0];
   const savedMovies = getMyListMovies();
+  
+  useEffect(() => {
+    const loadVipStatus = async () => {
+      try {
+        const data = await profileService.getVipStatus();
+        setVipStatus(data);
+      } catch (err) {
+        console.error('Lỗi lấy VIP status:', err);
+      }
+    };
+    loadVipStatus();
+  }, []);
+
+  if (!activeProfile) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-main)', color: '#fff' }}>Đang tải...</div>;
+  }
 
   // Open edit modal pre-filled with active profile data
   const openEditModal = () => {
     setEditName(activeProfile.name || '');
     setEditAvatar(activeProfile.avatarUrl || AVATARS[0]);
-    setEditGender(activeProfile.gender || 'nam');
     setTempPin(activeProfile.pin || null);
     setNameError('');
     setShowAvatarPicker(false);
     setShowEditModal(true);
   };
 
-  const saveProfile = () => {
+  const saveProfile = async () => {
     if (!editName.trim()) { setNameError('Tên hồ sơ không được để trống'); return; }
-    updateProfile(activeProfile.id, {
-      name: editName.trim(),
-      avatarUrl: editAvatar,
-      gender: editGender,
-      pin: tempPin,
-    });
-    setShowEditModal(false);
+    try {
+      await updateProfile(activeProfile.id, {
+        name: editName.trim(),
+        avatarUrl: editAvatar,
+        pin: tempPin,
+      });
+      setShowEditModal(false);
+    } catch (err) {
+      setNameError('Lỗi cập nhật hồ sơ');
+    }
   };
 
   // PIN handlers
@@ -151,19 +170,23 @@ const Profile = () => {
             </div>
             <div className="user-details">
               <h2>{activeProfile.name || 'Người dùng'}</h2>
-              <div className="info-row">
-                <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-                <span>VIP (Đang hoạt động)</span>
-              </div>
+              {vipStatus?.isVip && (
+                <div className="info-row">
+                  <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  <span>VIP (Đang hoạt động)</span>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Bên phải: Thống kê */}
           <div className="user-stats-section">
-            <div className="stat-box vip">
-              <div className="stat-number">45</div>
-              <div className="stat-label">Ngày VIP</div>
-            </div>
+            {vipStatus?.isVip && (
+              <div className="stat-box vip">
+                <div className="stat-number">{vipStatus.soNgayConLai}</div>
+                <div className="stat-label">Ngày VIP</div>
+              </div>
+            )}
             <div className="stat-box">
               <div className="stat-number">{continueWatching.length}</div>
               <div className="stat-label">Đang Xem</div>
@@ -175,69 +198,71 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* LỊCH SỬ XEM - full width */}
-        <div style={{ marginBottom: '40px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px', position: 'relative', zIndex: 30 }}>
-            <h3 className="row-title" style={{ margin: 0 }}>Lịch sử xem gần đây</h3>
-            <button
-              onClick={() => setShowAllHistory(v => !v)}
-              style={{ background: 'transparent', border: '1px solid var(--accent-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: 'var(--accent-color)', fontWeight: '600', padding: '5px 14px', transition: 'all 0.2s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-color)'; e.currentTarget.style.color = '#fff'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--accent-color)'; }}
-            >
-              {showAllHistory ? 'Thu gọn' : 'Xem tất cả'}
-            </button>
-          </div>
-
-          {showAllHistory ? (
-            <div className="mylist-grid">
-              {continueWatching.map((movie, i) => (
-                <div key={i} style={{ width: '100%' }}>
-                  <MovieCardHorizontal movie={movie} />
-                </div>
-              ))}
+        {/* TIẾP TỤC XEM - full width */}
+        {continueWatching.length > 0 && (
+          <div style={{ marginBottom: '40px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px', position: 'relative', zIndex: 30 }}>
+              <h3 className="row-title" style={{ margin: 0 }}>Tiếp tục xem</h3>
+              <button
+                onClick={() => setShowAllHistory(v => !v)}
+                style={{ background: 'transparent', border: '1px solid var(--accent-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: 'var(--accent-color)', fontWeight: '600', padding: '5px 14px', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-color)'; e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--accent-color)'; }}
+              >
+                {showAllHistory ? 'Thu gọn' : 'Xem tất cả'}
+              </button>
             </div>
-          ) : (
-            <MovieRow title="">
-              {continueWatching.map((m, i) => (
-                <MovieCardHorizontal key={i} movie={m} />
-              ))}
-            </MovieRow>
-          )}
-        </div>
+
+            {showAllHistory ? (
+              <div className="mylist-grid">
+                {continueWatching.map((movie, i) => (
+                  <div key={i} style={{ width: '100%' }}>
+                    <MovieCardHorizontal movie={movie} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <MovieRow title="">
+                {continueWatching.map((m, i) => (
+                  <MovieCardHorizontal key={i} movie={m} />
+                ))}
+              </MovieRow>
+            )}
+          </div>
+        )}
 
         {/* ROW 2: DANH SÁCH CỦA TÔI - full width */}
-        <div style={{ marginBottom: '30px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px', position: 'relative', zIndex: 30 }}>
-            <h3 className="row-title" style={{ margin: 0 }}>Danh sách của tôi</h3>
-            <button
-              onClick={() => setShowAllSaved(v => !v)}
-              style={{ background: 'transparent', border: '1px solid var(--accent-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: 'var(--accent-color)', fontWeight: '600', padding: '5px 14px', transition: 'all 0.2s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-color)'; e.currentTarget.style.color = '#fff'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--accent-color)'; }}
-            >
-              {showAllSaved ? 'Thu gọn' : 'Xem tất cả'}
-            </button>
-          </div>
-
-          {savedMovies.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', padding: '20px 0' }}>Bạn chưa lưu phim nào.</p>
-          ) : showAllSaved ? (
-            <div className="mylist-grid">
-              {savedMovies.map((movie, i) => (
-                <div key={movie.id || i} style={{ width: '100%' }}>
-                  <MovieCardVertical movie={movie} />
-                </div>
-              ))}
+        {savedMovies.length > 0 && (
+          <div style={{ marginBottom: '30px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '15px', position: 'relative', zIndex: 30 }}>
+              <h3 className="row-title" style={{ margin: 0 }}>Danh sách của tôi</h3>
+              <button
+                onClick={() => setShowAllSaved(v => !v)}
+                style={{ background: 'transparent', border: '1px solid var(--accent-color)', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', color: 'var(--accent-color)', fontWeight: '600', padding: '5px 14px', transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-color)'; e.currentTarget.style.color = '#fff'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--accent-color)'; }}
+              >
+                {showAllSaved ? 'Thu gọn' : 'Xem tất cả'}
+              </button>
             </div>
-          ) : (
-            <MovieRow title="">
-              {savedMovies.map((movie, i) => (
-                <MovieCardVertical key={movie.id || i} movie={movie} />
-              ))}
-            </MovieRow>
-          )}
-        </div>
+
+            {showAllSaved ? (
+              <div className="mylist-grid">
+                {savedMovies.map((movie, i) => (
+                  <div key={movie.id || i} style={{ width: '100%' }}>
+                    <MovieCardVertical movie={movie} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <MovieRow title="">
+                {savedMovies.map((movie, i) => (
+                  <MovieCardVertical key={movie.id || i} movie={movie} />
+                ))}
+              </MovieRow>
+            )}
+          </div>
+        )}
 
       </main>
 
@@ -290,15 +315,7 @@ const Profile = () => {
                 </div>
               )}
 
-              {/* Gender */}
-              <div className="form-group">
-                <label className="form-label">Giới tính</label>
-                <div className="radio-group">
-                  <label className="radio-item"><input type="radio" name="pg" value="nam" checked={editGender === 'nam'} onChange={() => setEditGender('nam')} /> Nam</label>
-                  <label className="radio-item"><input type="radio" name="pg" value="nu" checked={editGender === 'nu'} onChange={() => setEditGender('nu')} /> Nữ</label>
-                  <label className="radio-item"><input type="radio" name="pg" value="khac" checked={editGender === 'khac'} onChange={() => setEditGender('khac')} /> Khác</label>
-                </div>
-              </div>
+
 
               {/* PIN Settings — NO delete option */}
               <div className="setting-list">

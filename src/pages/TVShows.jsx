@@ -10,13 +10,11 @@ import { tvShowRows, tvHero } from '../data/movieData';
 
 const TVShows = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const { getMovieById } = useContent();
+  const { movies } = useContent();
 
-  const heroImages = tvHero.map(id => {
-    const m = getMovieById(id);
-    if (!m) return null;
-    return { ...m, url: m.posterHorizontal };
-  }).filter(Boolean);
+  const heroImages = tvShowRows.length > 0 
+    ? movies.filter(m => m.genres && m.genres.includes(tvShowRows[0].title)).slice(0, 5) 
+    : [];
 
   return (
     <>
@@ -25,10 +23,10 @@ const TVShows = () => {
       
       {heroImages.length > 0 && <HeroSlider images={heroImages} />}
 
-      <main className="movie-sections">
+      <main className="movie-sections" style={{ marginTop: heroImages.length > 0 ? undefined : '80px' }}>
         {tvShowRows.map((row, index) => {
-          const rowMovies = row.movies.map(id => getMovieById(id)).filter(Boolean);
-          if (rowMovies.length === 0) return null;
+          const rowMovies = movies.filter(m => m.genres && m.genres.includes(row.title));
+          if (!rowMovies || rowMovies.length === 0) return null;
           return (
             <MovieRow key={index} title={row.title}>
               {rowMovies.map((movie, idx) => (
