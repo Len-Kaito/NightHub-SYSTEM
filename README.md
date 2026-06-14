@@ -17,7 +17,7 @@ Trước khi cài đặt, hãy đảm bảo máy tính của bạn đã cài đ�
 ### Bước 1: Clone dự án về máy
 Mở Terminal và chạy lệnh sau để tải mã nguồn về máy:
 ```bash
-git clone <đường-link-github-của-bạn>
+git clone https://github.com/Len-Kaito/NightHub-SYSTEM.git
 cd nighthub-react
 ```
 
