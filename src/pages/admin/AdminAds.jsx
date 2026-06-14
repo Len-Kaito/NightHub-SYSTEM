@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, MonitorPlay } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 const AdminAds = () => {
+  const { showToast } = useToast();
   const [ads, setAds] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -37,33 +39,36 @@ const AdminAds = () => {
         setIsAddModalOpen(false);
         fetchAds();
         setFormData({ requestedViews: 0, price: 0, videoUrl: '', partnerId: '' });
+        showToast('Tạo chiến dịch quảng cáo thành công');
       } else {
         const err = await res.json();
-        alert(err.message || 'Lỗi tạo quảng cáo');
+        showToast(err.message || 'Lỗi tạo quảng cáo', true);
       }
     } catch (err) {
       console.error(err);
+      showToast('Lỗi kết nối server', true);
     }
   };
 
   return (
-    <div className="admin-ads animate-fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
-        <h2 style={{ fontWeight: 600 }}>Quản lý Quảng Cáo & Đối Tác</h2>
-        <button 
-          onClick={() => setIsAddModalOpen(true)}
-          style={{ 
-            background: 'var(--accent-color)', color: '#fff', border: 'none', 
-            padding: '10px 20px', borderRadius: '8px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600
-          }}
-        >
-          <Plus size={18} /> Tạo chiến dịch mới
-        </button>
-      </div>
+    <>
+      <div className="admin-ads animate-fade-in">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+          <h2 style={{ fontWeight: 600 }}>Quản lý Quảng Cáo & Đối Tác</h2>
+        </div>
 
-      <div className="admin-card">
-        <div style={{ overflowX: 'auto' }}>
+        <div className="admin-card">
+          {/* Toolbar */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+            <button 
+              onClick={() => setIsAddModalOpen(true)}
+              className="admin-btn-primary"
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <Plus size={18} /> Tạo chiến dịch mới
+            </button>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
           <table className="admin-table">
             <thead>
               <tr>
@@ -97,6 +102,8 @@ const AdminAds = () => {
         )}
       </div>
 
+      </div>
+
       {isAddModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: '#1a1c23', padding: '30px', borderRadius: '12px', width: '100%', maxWidth: '500px' }}>
@@ -122,15 +129,20 @@ const AdminAds = () => {
                   <label style={{ display: 'block', marginBottom: '5px', fontSize: '13px', color: '#888' }}>URL Video Quảng Cáo</label>
                   <input type="text" value={formData.videoUrl} onChange={e => setFormData({...formData, videoUrl: e.target.value})} style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', borderRadius: '8px' }} />
                 </div>
-                <button type="submit" style={{ background: 'var(--accent-color)', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, marginTop: '10px' }}>
-                  Thêm Chiến Dịch
-                </button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '10px' }}>
+                  <button type="button" onClick={() => setIsAddModalOpen(false)} className="admin-btn-secondary">
+                    Hủy
+                  </button>
+                  <button type="submit" className="admin-btn-primary">
+                    Thêm Chiến Dịch
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

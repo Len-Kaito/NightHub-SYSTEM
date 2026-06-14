@@ -11,6 +11,8 @@ router.get('/dashboard-stats', adminController.getDashboardStats);
 // ==================== PHIM ====================
 router.get('/movies', adminController.getMovies);
 router.post('/movies', adminController.addMovie);
+router.put('/movies/:id', adminController.updateMovie);
+router.delete('/movies/:id', adminController.deleteMovie);
 router.put('/movies/:id/status', adminController.updateMovieStatus);
 router.put('/movies/:id/censor-status', adminController.updateCensorStatus);
 

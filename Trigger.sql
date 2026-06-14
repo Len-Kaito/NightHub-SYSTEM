@@ -184,34 +184,49 @@ DECLARE
     v_NextTB NUMBER;
     v_MaHoSo VARCHAR2(10);
 BEGIN
-    -- Chỉ kích hoạt khi trạng thái chuyển sang 'Bác bỏ', TrangThaiXL có default = Chờ xử lý
-    IF :OLD.TrangThaiXL <> 'Bác bỏ' AND :NEW.TrangThaiXL = 'Bác bỏ' THEN
+    -- Chỉ kích hoạt khi trạng thái chuyển sang 'Đã ẩn'
+    IF :OLD.TrangThaiXL <> 'Đã ẩn' AND :NEW.TrangThaiXL = 'Đã ẩn' THEN
         
         -- Bước 1: Truy vết ngược để lấy mã hồ sơ người dùng
-        SELECT bl.MaHoSo INTO v_MaHoSo
-        FROM HE_THONG_DANH_DAU ht
-        JOIN BINH_LUAN_DANH_GIA bl ON ht.MaBL = bl.MaBL
-        WHERE ht.MaHTDD = :NEW.MaHTDD;
+        BEGIN
+            SELECT bl.MaHoSo INTO v_MaHoSo
+            FROM HE_THONG_DANH_DAU ht
+            JOIN BINH_LUAN_DANH_GIA bl ON ht.MaBL = bl.MaBL
+            WHERE ht.MaHTDD = :NEW.MaHTDD;
+        EXCEPTION
+            WHEN NO_DATA_FOUND THEN
+                BEGIN
+                    SELECT bl.MaHoSo INTO v_MaHoSo
+                    FROM BAO_CAO_VI_PHAM bc
+                    JOIN BINH_LUAN_DANH_GIA bl ON bc.MaBL = bl.MaBL
+                    WHERE bc.MaBC = :NEW.MaBC;
+                EXCEPTION
+                    WHEN NO_DATA_FOUND THEN
+                        v_MaHoSo := NULL;
+                END;
+        END;
 
-        -- Bước 2: Khởi tạo mã Thông báo mới (Chuỗi tự tăng bắt đầu từ ký tự thứ 3)
-        SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaTB, 3))), 0) + 1
-        INTO v_NextTB
-        FROM THONG_BAO;
+        IF v_MaHoSo IS NOT NULL THEN
+            -- Bước 2: Khởi tạo mã Thông báo mới
+            SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaTB, 3))), 0) + 1
+            INTO v_NextTB
+            FROM THONG_BAO;
 
-        -- Bước 3: Gửi thông báo đến hòm thư người dùng
-        INSERT INTO THONG_BAO (MaTB, TieuDe, NoiDung, NgayGui, MaHoSo)
-        VALUES (
-            'TB' || LPAD(v_NextTB, 4, '0'),
-            'Cảnh báo vi phạm tiêu chuẩn cộng đồng',
-            'Một bình luận của bạn đã bị gỡ bỏ do chứa nội dung vi phạm quy định nền tảng.',
-            SYSDATE,
-            v_MaHoSo
-        );
+            -- Bước 3: Gửi thông báo đến hòm thư người dùng
+            INSERT INTO THONG_BAO (MaTB, TieuDe, NoiDung, NgayGui, MaHoSo)
+            VALUES (
+                'TB' || LPAD(v_NextTB, 4, '0'),
+                'Cảnh báo vi phạm tiêu chuẩn cộng đồng',
+                'Một bình luận của bạn đã bị gỡ bỏ do chứa nội dung vi phạm quy định nền tảng.',
+                SYSDATE,
+                v_MaHoSo
+            );
+        END IF;
     END IF;
 EXCEPTION
     -- Xử lý ngoại lệ trong trường hợp dữ liệu lịch sử bị đứt gãy
-    WHEN NO_DATA_FOUND THEN
-        DBMS_OUTPUT.PUT_LINE('Lỗi: Không tìm thấy hồ sơ người dùng để gửi thông báo.');
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Lỗi: Không thể gửi thông báo.');
 END;
 /
 -- Tự động đồng bộ trạng thái hiển thị phim theo kiểm duyệt

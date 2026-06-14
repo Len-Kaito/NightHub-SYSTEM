@@ -41,7 +41,9 @@ const AdminLayout = () => {
     { path: '/admin/movies', icon: <Film />, label: 'CMS Kho Phim', roles: ['SYS_ADMIN', 'CONTENT_ADMIN'] },
     { path: '/admin/ads', icon: <MonitorPlay />, label: 'Quảng cáo & Đối tác', roles: ['SYS_ADMIN', 'CONTENT_ADMIN'] },
     { path: '/admin/moderation', icon: <ShieldAlert />, label: 'Kiểm duyệt nội dung', roles: ['SYS_ADMIN', 'MOD'] },
+    { path: '/admin/chat', icon: <MessageSquareText />, label: 'Live Chat CSKH', roles: ['SYS_ADMIN', 'CC'] },
     { path: '/admin/users', icon: <Users />, label: 'Tài khoản & Phân quyền', roles: ['SYS_ADMIN'] },
+    { path: '/admin/logs', icon: <FileBarChart />, label: 'Nhật ký hệ thống', roles: ['SYS_ADMIN'] },
   ].filter(item => item.roles.includes(roleId));
 
   const handleLogout = () => {

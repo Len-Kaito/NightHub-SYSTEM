@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const oracledb = require('oracledb');
 
 const adminController = {
   getDashboardStats: async (req, res) => {
@@ -26,7 +27,7 @@ const adminController = {
 
       // 4. Phân tích lượt xem theo danh mục
       const categoryResult = await db.execute(
-        `SELECT TenDM, LuotXemDanhMuc FROM VIEW_LUOT_XEM_DANH_MUC WHERE LuotXemDanhMuc > 0 ORDER BY LuotXemDanhMuc DESC FETCH FIRST 5 ROWS ONLY`,
+        `SELECT * FROM (SELECT TenDM, LuotXemDanhMuc FROM VIEW_LUOT_XEM_DANH_MUC WHERE LuotXemDanhMuc > 0 ORDER BY LuotXemDanhMuc DESC) WHERE ROWNUM <= 5`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
       
@@ -37,40 +38,49 @@ const adminController = {
         value: Number(r.LUOTXEMDANHMUC) || 0
       }));
 
+      const topMoviesResult = await db.execute(
+        `SELECT * FROM (SELECT MaPhim, TenPhim, LuotXem, LuotThich, TongSoBinhLuan, SoLuotTuongTac 
+         FROM MV_PHIM_THINH_HANH 
+         ORDER BY SoLuotTuongTac DESC) WHERE ROWNUM <= 5`,
+        {}, { outFormat: db.OUT_FORMAT_OBJECT }
+      );
+      const topMovies = topMoviesResult.rows;
+
       const totalRevenueVal = Number(revenue.TONGDOANHTHU) || 0;
       const totalViewsVal = Number(totalViews) || 0;
 
-      // Thống kê doanh thu theo tháng (giống code Cursor có sẵn)
-      const revMonthlyResult = await db.execute(
-        `SELECT TO_CHAR(NgayGiaoDich, 'YYYY-MM') as ThangNam, SUM(SoTien) as DoanhThu 
+      // Thống kê doanh thu và lượt xem 6 tháng qua
+      const revDailyResult = await db.execute(
+        `SELECT TO_CHAR(NgayGiaoDich, 'YYYY-MM') as Thang, SUM(SoTien) as DoanhThu 
          FROM GIAO_DICH 
-         WHERE TrangThai = 'Thành công'
-         GROUP BY TO_CHAR(NgayGiaoDich, 'YYYY-MM') ORDER BY ThangNam ASC`,
+         WHERE TrangThai = 'Thành công' AND NgayGiaoDich >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -5)
+         GROUP BY TO_CHAR(NgayGiaoDich, 'YYYY-MM') ORDER BY Thang ASC`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
       
-      const viewsMonthlyResult = await db.execute(
-        `SELECT TO_CHAR(NgayTT, 'YYYY-MM') as ThangNam, COUNT(*) as LuotXem 
+      const viewsDailyResult = await db.execute(
+        `SELECT TO_CHAR(NgayTT, 'YYYY-MM') as Thang, COUNT(*) as LuotXem 
          FROM LICH_SU_XEM 
-         GROUP BY TO_CHAR(NgayTT, 'YYYY-MM') ORDER BY ThangNam ASC`,
+         WHERE NgayTT >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -5)
+         GROUP BY TO_CHAR(NgayTT, 'YYYY-MM') ORDER BY Thang ASC`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
 
-      // Tạo mảng 6 tháng qua để hiển thị (cho đẹp biểu đồ)
+      // Tạo mảng 6 tháng qua để hiển thị
       const revenueData = [];
       for (let i = 5; i >= 0; i--) {
         let d = new Date();
         d.setMonth(d.getMonth() - i);
-        let monthStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        let displayStr = `T${d.getMonth() + 1}/${d.getFullYear().toString().slice(-2)}`;
+        let dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        let displayStr = `T${d.getMonth() + 1}`;
         
-        const rMonth = revMonthlyResult.rows.find(r => r.THANGNAM === monthStr);
-        const vMonth = viewsMonthlyResult.rows.find(v => v.THANGNAM === monthStr);
+        const rDay = revDailyResult.rows.find(r => r.THANG === dateStr);
+        const vDay = viewsDailyResult.rows.find(v => v.THANG === dateStr);
         
         revenueData.push({
           name: displayStr,
-          revenue: rMonth ? Number(rMonth.DOANHTHU) : 0,
-          views: vMonth ? Number(vMonth.LUOTXEM) : 0
+          revenue: rDay ? Number(rDay.DOANHTHU) : 0,
+          views: vDay ? Number(vDay.LUOTXEM) : 0
         });
       }
       
@@ -84,7 +94,9 @@ const adminController = {
         totalUsers,
         totalViews: totalViewsVal,
         revenueData,
-        revenueBreakdown
+        revenueBreakdown,
+        categoryData: deviceData,
+        topMovies
       });
 
     } catch (error) {
@@ -97,7 +109,14 @@ const adminController = {
   getMovies: async (req, res) => {
     try {
       const result = await db.execute(
-        `SELECT MaPhim, TenPhim, NamSX, TrangThaiHT, TrangThaiKD, LuotThich, Poster FROM PHIM ORDER BY MaPhim DESC`,
+        `SELECT 
+           p.MaPhim, p.TenPhim, p.NamSX, p.TrangThaiHT, p.TrangThaiKD, p.LuotThich, p.Poster,
+           fn_LaySaoTrungBinh(p.MaPhim) as DiemTB,
+           fn_DemSoTapHienCo(p.MaPhim) as SoTap,
+           fn_DemBinhLuanPhim(p.MaPhim) as SoBinhLuan,
+           (SELECT MAX(MaQC) FROM PHIM_QUANG_CAO WHERE MaPhim = p.MaPhim) as MaQC
+         FROM PHIM p
+         ORDER BY p.MaPhim DESC`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
       res.json(result.rows.map(r => ({
@@ -107,7 +126,11 @@ const adminController = {
         status: r.TRANGTHAIHT,
         censorStatus: r.TRANGTHAIKD,
         likes: r.LUOTTHICH,
-        poster: r.POSTER
+        poster: r.POSTER,
+        avgRating: Number(r.DIEMTB) || 0,
+        episodes: Number(r.SOTAP) || 0,
+        comments: Number(r.SOBINHLUAN) || 0,
+        adId: r.MAQC || null
       })));
     } catch (error) {
       console.error('Lỗi lấy danh sách phim:', error);
@@ -163,6 +186,62 @@ const adminController = {
     }
   },
 
+  updateMovie: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { title, poster, description, year, country, trailer, censorStatus, status } = req.body;
+      
+      await db.execute(
+        `BEGIN
+           sp_CapNhatPhim(:id, :title, :poster, :description, :year, :country, :trailer, :censorStatus, :status);
+         END;`,
+        { 
+          id,
+          title: title || null,
+          poster: poster || null,
+          description: description || null,
+          year: year || null,
+          country: country || null,
+          trailer: trailer || null,
+          censorStatus: censorStatus || null,
+          status: status || null
+        },
+        { autoCommit: true }
+      );
+      
+      const { hasAd, adId } = req.body;
+      if (hasAd && adId) {
+        // Xóa quảng cáo cũ của phim (nếu có) và thêm mới
+        await db.execute(`DELETE FROM PHIM_QUANG_CAO WHERE MaPhim = :id`, { id }, { autoCommit: true });
+        await db.execute(`INSERT INTO PHIM_QUANG_CAO (MaPhim, MaQC, ThoiDiemPhat) VALUES (:id, :adId, 600)`, { id, adId }, { autoCommit: true });
+      } else {
+        // Xóa tất cả quảng cáo của phim
+        await db.execute(`DELETE FROM PHIM_QUANG_CAO WHERE MaPhim = :id`, { id }, { autoCommit: true });
+      }
+      
+      res.json({ message: 'Cập nhật phim thành công' });
+    } catch (error) {
+      console.error('Lỗi cập nhật phim:', error);
+      res.status(500).json({ message: 'Lỗi server', error: error.message });
+    }
+  },
+
+  deleteMovie: async (req, res) => {
+    try {
+      const { id } = req.params;
+      // Soft delete: chuyển trạng thái sang Ẩn
+      await db.execute(
+        `UPDATE PHIM SET TrangThaiHT = 'Ẩn' WHERE MaPhim = :id`,
+        { id },
+        { autoCommit: true }
+      );
+      res.json({ message: 'Đã ẩn phim (Soft delete) thành công' });
+    } catch (error) {
+      console.error('Lỗi ẩn phim:', error);
+      res.status(500).json({ message: 'Lỗi server', error: error.message });
+    }
+  },
+
   updateMovieStatus: async (req, res) => {
     try {
       const { id } = req.params;
@@ -201,11 +280,15 @@ const adminController = {
   getAds: async (req, res) => {
     try {
       const result = await db.execute(
-        `SELECT MADT, MAQC, SOLUOTYEUCAU, SOLUOTXEM, DONGIA, DOANHTHU FROM VIEW_QUANG_CAO_DO`,
+        `SELECT q.MADT, q.MAQC, q.SOLUOTYEUCAU, q.SOLUOTXEM, q.DONGIA, q.DOANHTHU, dt.TENDT 
+         FROM VIEW_QUANG_CAO_DO q
+         JOIN DOI_TAC dt ON q.MADT = dt.MADT
+         WHERE dt.PhanLoai = N'Quảng cáo'`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
       res.json(result.rows.map(r => ({
         partnerId: r.MADT,
+        partnerName: r.TENDT,
         adId: r.MAQC,
         requestedViews: r.SOLUOTYEUCAU,
         currentViews: r.SOLUOTXEM,
@@ -246,10 +329,21 @@ const adminController = {
   getReports: async (req, res) => {
     try {
       const result = await db.execute(
-        `SELECT kd.MaBLKD, bc.LyDo, bc.NgayTao, bl.NoiDung, bl.MaHoSo, bl.MaBL 
-         FROM BINH_LUAN_KIEM_DUYET kd 
-         JOIN BAO_CAO_VI_PHAM bc ON kd.MaBC = bc.MaBC 
-         JOIN BINH_LUAN_DANH_GIA bl ON bc.MaBL = bl.MaBL 
+        `SELECT 
+            kd.MaBLKD, 
+            bl.NoiDung, 
+            bl.MaHoSo, 
+            bl.MaBL,
+            bc.LyDo, 
+            bc.MaHoSoGui,
+            bc.NgayTao AS NgayBaoCao,
+            ht.LoaiDanhDau, 
+            ht.NgayDanhDau,
+            ht.DoTinCay
+         FROM BINH_LUAN_KIEM_DUYET kd
+         LEFT JOIN BAO_CAO_VI_PHAM bc ON kd.MaBC = bc.MaBC
+         LEFT JOIN HE_THONG_DANH_DAU ht ON kd.MaHTDD = ht.MaHTDD
+         JOIN BINH_LUAN_DANH_GIA bl ON bl.MaBL = COALESCE(bc.MaBL, ht.MaBL)
          WHERE kd.TrangThaiXL = N'Chờ xử lý'`,
         {}, { outFormat: db.OUT_FORMAT_OBJECT }
       );
@@ -257,10 +351,19 @@ const adminController = {
         reportId: r.MABLKD,
         commentId: r.MABL,
         content: r.NOIDUNG,
-        reason: r.LYDO,
-        createdAt: r.NGAYTAO,
+        reason: r.LYDO || (
+          r.LOAIDANHDAU === 'hate_speech' ? 'Ngôn từ thù ghét' : 
+          r.LOAIDANHDAU === 'copyright' ? 'Vi phạm bản quyền' : 
+          r.LOAIDANHDAU === 'nsfw' ? 'Nội dung nhạy cảm' :
+          r.LOAIDANHDAU === 'violence' ? 'Bạo lực' :
+          r.LOAIDANHDAU === 'spam' ? 'Spam/Quảng cáo rác' :
+          r.LOAIDANHDAU || 'Vi phạm tiêu chuẩn cộng đồng'
+        ),
+        createdAt: r.NGAYBAOCAO || r.NGAYDANHDAU,
         status: 'Chờ xử lý',
-        profileId: r.MAHOSO
+        profileId: r.MAHOSO,
+        reporter: r.MAHOSOGUI || 'Hệ thống tự động',
+        confidence: r.DOTINCAY
       })));
     } catch (error) {
       console.error('Lỗi lấy danh sách vi phạm:', error);
@@ -273,10 +376,10 @@ const adminController = {
       const { reportId, commentId, profileId, action } = req.body;
       
       if (action === 'delete') {
-        // Xóa bình luận
+        // Đổi trạng thái bình luận sang Bị ẩn hệ thống
         await db.execute(
-          `BEGIN sp_XoaBinhLuan(:commentId, :profileId); END;`,
-          { commentId, profileId },
+          `UPDATE BINH_LUAN_DANH_GIA SET TrangThai = N'Bị ẩn hệ thống' WHERE MaBL = :commentId`,
+          { commentId },
           { autoCommit: true }
         );
         // Cập nhật trạng thái Kiểm Duyệt
@@ -287,12 +390,12 @@ const adminController = {
       } else if (action === 'ignore') {
         // Bỏ qua vi phạm, hiển thị lại bình luận
         await db.execute(
-          `UPDATE BINH_LUAN_DANH_GIA SET TRANGTHAI = N'Bình thường' WHERE MaBL = :commentId`,
+          `UPDATE BINH_LUAN_DANH_GIA SET TRANGTHAI = N'Hiển thị' WHERE MaBL = :commentId`,
           { commentId },
           { autoCommit: true }
         );
         await db.execute(
-          `UPDATE BINH_LUAN_KIEM_DUYET SET TrangThaiXL = N'Đã bỏ qua', NoiDung = N'Bình luận an toàn, không vi phạm' WHERE MaBLKD = :reportId`,
+          `UPDATE BINH_LUAN_KIEM_DUYET SET TrangThaiXL = N'Bác bỏ', NoiDung = N'Bình luận an toàn, báo cáo bị bác bỏ' WHERE MaBLKD = :reportId`,
           { reportId }, { autoCommit: true }
         );
       }
@@ -306,34 +409,84 @@ const adminController = {
 
   scanReports: async (req, res) => {
     try {
-      const hsResult = await db.execute(`SELECT MaHoSo FROM HO_SO FETCH FIRST 1 ROWS ONLY`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
-      const phimResult = await db.execute(`SELECT MaPhim FROM PHIM FETCH FIRST 1 ROWS ONLY`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
-      
-      const validHs = hsResult.rows.length > 0 ? hsResult.rows[0].MAHOSO : null;
-      const validPhim = phimResult.rows.length > 0 ? phimResult.rows[0].MAPHIM : null;
-      
-      if (!validHs || !validPhim) {
-        return res.status(500).json({ message: 'Không đủ dữ liệu mẫu (Cần ít nhất 1 Hồ sơ và 1 Phim) để test quét' });
-      }
+      // PL/SQL Block thực sự quét toàn bộ BINH_LUAN_DANH_GIA chưa bị đánh dấu
+      const result = await db.execute(
+        `DECLARE
+            CURSOR c_unflagged IS
+                SELECT MaBL, NoiDung
+                FROM BINH_LUAN_DANH_GIA bl
+                WHERE bl.TrangThai = N'Hiển thị'
+                  AND NOT EXISTS (
+                      SELECT 1 FROM HE_THONG_DANH_DAU ht WHERE ht.MaBL = bl.MaBL
+                  );
+                  
+            v_LoaiDanhDau NVARCHAR2(50);
+            v_GhiChu      NVARCHAR2(500);
+            v_NoiDung     NVARCHAR2(2000);
+            v_NextHTDD    NUMBER;
+            v_NextBLKD    NUMBER;
+            v_MaHTDD      VARCHAR2(10);
+            v_Count       NUMBER := 0;
+        BEGIN
+            SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaHTDD, 5))), 0) INTO v_NextHTDD FROM HE_THONG_DANH_DAU;
+            SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaBLKD, 5))), 0) INTO v_NextBLKD FROM BINH_LUAN_KIEM_DUYET;
 
-      // Chèn thử 1 bình luận chứa từ khóa vi phạm để Trigger TRG_DANHDAU_BINHLUAN_VIPHAM quét và đưa vào BINH_LUAN_KIEM_DUYET
-      await db.execute(
-        `BEGIN 
-           sp_BinhLuanPhim(
-             p_NoiDung => :noidung, 
-             p_SoDiem => 1, 
-             p_MaHoSo => :hoSoId, 
-             p_MaPhim => :phimId
-           ); 
-         END;`,
+            FOR r IN c_unflagged LOOP
+                v_NoiDung := LOWER(r.NoiDung);
+                v_LoaiDanhDau := NULL;
+
+                IF REGEXP_LIKE(v_NoiDung, 'phimmoi|motphim|link lậu|xem free|bản cam|full hd miễn phí') THEN
+                    v_LoaiDanhDau := 'copyright';
+                    v_GhiChu := 'Phát hiện chia sẻ liên kết lậu, vi phạm bản quyền nội dung số.';
+                ELSIF REGEXP_LIKE(v_NoiDung, '18\+|sex|porn|phim heo|link sẽ|nude') THEN
+                    v_LoaiDanhDau := 'nsfw';
+                    v_GhiChu := 'Phát hiện ngôn từ chứa nội dung nhạy cảm, đồi trụy.';
+                ELSIF REGEXP_LIKE(v_NoiDung, 'dm|đm|vcl|chó đẻ|ngu học|thằng l|con c') THEN
+                    v_LoaiDanhDau := 'hate_speech';
+                    v_GhiChu := 'Phát hiện ngôn từ thô tục, công kích và thù ghét cộng đồng.';
+                ELSIF REGEXP_LIKE(v_NoiDung, 'giết|chém|bắn nát|đẫm máu|chặt xác') THEN
+                    v_LoaiDanhDau := 'violence';
+                    v_GhiChu := 'Phát hiện từ ngữ mang khuynh hướng kích động bạo lực vật lý.';
+                ELSIF REGEXP_LIKE(v_NoiDung, 'tự tử|tự sát|muốn chết|rạch tay|kết liễu') THEN
+                    v_LoaiDanhDau := 'self_harm';
+                    v_GhiChu := 'Phát hiện nội dung nhạy cảm liên quan đến hành vi tự hại.';
+                ELSIF REGEXP_LIKE(v_NoiDung, 'xấu xí|đĩ|phò|trán dô|đồ bỏ đi') THEN
+                    v_LoaiDanhDau := 'harrassment';
+                    v_GhiChu := 'Phát hiện hành vi miệt thị ngoại hình hoặc quấy rối cá nhân.';
+                ELSIF REGEXP_LIKE(v_NoiDung, 'spam|scam|http|www\\.|\\.com|\\.vn|mua nick|giá rẻ|inbox') THEN
+                    v_LoaiDanhDau := 'spam';
+                    v_GhiChu := 'Phát hiện từ khóa rác, quảng cáo thương mại hoặc liên kết ngoài.';
+                ELSIF REGEXP_LIKE(v_NoiDung, 'tin giả|lừa đảo|dắt mũi|bịa đặt') THEN
+                    v_LoaiDanhDau := 'fake_info';
+                    v_GhiChu := 'Phát hiện nghi vấn phát tán thông tin sai lệch, gây hoang mang.';
+                END IF;
+
+                IF v_LoaiDanhDau IS NOT NULL THEN
+                    v_NextHTDD := v_NextHTDD + 1;
+                    v_MaHTDD := 'HTDD' || LPAD(v_NextHTDD, 3, '0');
+
+                    INSERT INTO HE_THONG_DANH_DAU (MaHTDD, DoTinCay, NgayDanhDau, LoaiDanhDau, GhiChu, MaBL)
+                    VALUES (v_MaHTDD, ROUND(DBMS_RANDOM.VALUE(90, 95), 1), SYSDATE, v_LoaiDanhDau, v_GhiChu, r.MaBL);
+
+                    v_NextBLKD := v_NextBLKD + 1;
+                    INSERT INTO BINH_LUAN_KIEM_DUYET (MaBLKD, NoiDung, TrangThaiXL, MaBC, MaHTDD, MaTK_KDV)
+                    VALUES ('BLKD' || LPAD(v_NextBLKD, 3, '0'), N'Hệ thống rà soát từ khóa phát hiện vi phạm tự động.', N'Chờ xử lý', NULL, v_MaHTDD, NULL);
+                    
+                    v_Count := v_Count + 1;
+                END IF;
+            END LOOP;
+            
+            COMMIT;
+            :outCount := v_Count;
+        END;`,
         {
-          phimId: validPhim,
-          hoSoId: validHs,
-          noidung: 'Trang web rác rưởi, qua motphim hay phimmoi xem full hd miễn phí còn hơn!'
+          outCount: { dir: oracledb.BIND_OUT, type: oracledb.NUMBER }
         },
         { autoCommit: true }
       );
-      res.json({ message: 'Quét thành công. Đã phát hiện và ngăn chặn tự động 1 bình luận chứa từ khóa vi phạm!' });
+      
+      const count = result.outBinds.outCount;
+      res.json({ message: count > 0 ? `Quét hoàn tất! Phát hiện và đưa vào hàng chờ ${count} bình luận vi phạm mới.` : 'Quét hoàn tất! Hệ thống hiện tại sạch sẽ, không có vi phạm mới.' });
     } catch (error) {
       console.error('Lỗi quét vi phạm:', error);
       res.status(500).json({ message: 'Lỗi server khi quét' });

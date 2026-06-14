@@ -81,7 +81,7 @@ SELECT
         (
             SELECT SUM(SoLuotXem * DonGia)
             FROM QUANG_CAO
-            WHERE TrangThai = 'Đã duyệt'
+            WHERE TrangThai = 'Hoạt động'
         ), 0
     ) AS Doanh_thu_quang_cao, 
     NVL(
