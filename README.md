@@ -28,8 +28,6 @@ Dự án sử dụng Oracle SQL. Bạn cần chạy file SQL có sẵn trong th�
 2. Kết nối bằng tài khoản quyền cao (mặc định là `SYSTEM` hoặc `SYS`).
 3. Chạy file `build_database.sql` (Tạo bảng, nạp dữ liệu và cấu hình View/Function/Trigger).
 
-*(Lưu ý: File `khoi_tao_user_va_role.sql` chỉ là bài tập phân quyền sinh viên nộp kèm, giảng viên **không cần chạy** file này để chạy web).*
-
 > [!IMPORTANT]
 > **Cấu hình kết nối Backend:**
 > Mặc định Backend Node.js đang sử dụng tài khoản `SYSTEM` với mật khẩu là `123456` để kết nối vào Database.
