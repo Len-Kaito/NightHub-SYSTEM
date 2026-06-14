@@ -29,8 +29,8 @@ Dự án sử dụng Oracle SQL. Bạn cần chạy file SQL có sẵn trong th�
 
 > [!IMPORTANT]
 > **Cấu hình kết nối Backend:**
-> Mặc định Backend Node.js đang sử dụng tài khoản `SYSTEM` với mật khẩu là `123456` để kết nối vào Database.
-> Nếu Oracle của bạn sử dụng mật khẩu khác (ví dụ `Sys12345`), bạn vui lòng mở file `server/.env` và sửa lại dòng `DB_PASSWORD` cho đúng với mật khẩu của máy bạn.
+> Mặc định Backend Node.js đang sử dụng tài khoản `NIGHUB` với mật khẩu là `123456` để kết nối vào Database.
+> Nếu Oracle của bạn sử dụng mật khẩu khác hoặc tài khoản khác (ví dụ `SYS`), bạn vui lòng mở file `server/.env` và sửa lại cho đúng với mật khẩu và tài khoản của máy bạn.
 
 > [!TIP]
 > **Xóa và Nạp lại dữ liệu (Reset Database):**
