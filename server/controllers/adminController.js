@@ -1,6 +1,22 @@
 const db = require('../config/database');
 const oracledb = require('oracledb');
 
+const logAdminAction = async (action, target, notes, adminId = 'TK001') => {
+  try {
+    const nextLogRes = await db.execute(`SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaLog, 4))), 0) + 1 AS NEXTLOG FROM NHAT_KY_HE_THONG`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
+    const nextLogNum = nextLogRes.rows[0].NEXTLOG || 1;
+    const maLog = 'Log' + String(nextLogNum).padStart(3, '0');
+    await db.execute(
+      `INSERT INTO NHAT_KY_HE_THONG (MALOG, NGAYGIO, HANHDONG, DOITUONG, GHICHU, MATK_NV)
+       VALUES (:maLog, CURRENT_TIMESTAMP, :action, :target, :notes, :adminId)`,
+      { maLog, action, target, notes, adminId },
+      { autoCommit: true }
+    );
+  } catch (err) {
+    console.error('Lỗi khi ghi nhật ký hệ thống:', err);
+  }
+};
+
 const adminController = {
   getDashboardStats: async (req, res) => {
     try {
@@ -235,6 +251,7 @@ const adminController = {
         { id },
         { autoCommit: true }
       );
+      await logAdminAction('DELETE', id, `Xóa phim khỏi hệ thống`);
       res.json({ message: 'Đã ẩn phim (Soft delete) thành công' });
     } catch (error) {
       console.error('Lỗi ẩn phim:', error);
@@ -252,6 +269,7 @@ const adminController = {
         { status, id },
         { autoCommit: true }
       );
+      await logAdminAction('UPDATE', id, `Cập nhật trạng thái hiển thị phim: ${status}`);
       res.json({ message: 'Cập nhật trạng thái thành công' });
     } catch (error) {
       console.error('Lỗi cập nhật phim:', error);
@@ -367,6 +385,25 @@ const adminController = {
       })));
     } catch (error) {
       console.error('Lỗi lấy danh sách vi phạm:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  getViolations: async (req, res) => {
+    try {
+      const result = await db.execute(
+        `SELECT MaBL, NoiDung, NgayTao, TrangThai, MaHoSo FROM VIEW_BINH_LUAN_VI_PHAM ORDER BY NgayTao DESC`,
+        {}, { outFormat: db.OUT_FORMAT_OBJECT }
+      );
+      res.json(result.rows.map(r => ({
+        commentId: r.MABL,
+        content: r.NOIDUNG,
+        createdAt: r.NGAYTAO,
+        status: r.TRANGTHAI,
+        profileId: r.MAHOSO
+      })));
+    } catch (error) {
+      console.error('Lỗi lấy danh sách bình luận vi phạm:', error);
       res.status(500).json({ message: 'Lỗi server' });
     }
   },
@@ -524,6 +561,8 @@ const adminController = {
         { autoCommit: true }
       );
 
+      await logAdminAction('UPDATE', id, `Thay đổi trạng thái tài khoản thành ${status}`);
+
       res.json({ message: 'Cập nhật trạng thái thành công' });
     } catch (error) {
       console.error('Lỗi cập nhật tài khoản:', error);
@@ -565,6 +604,9 @@ const adminController = {
         { role, id },
         { autoCommit: true }
       );
+      
+      await logAdminAction('UPDATE', id, `Cập nhật vai trò tài khoản thành ${role}`);
+      
       res.json({ message: 'Cập nhật vai trò thành công' });
     } catch (error) {
       console.error('Lỗi cập nhật vai trò:', error);
@@ -635,6 +677,109 @@ const adminController = {
       });
     } catch (error) {
       console.error('Lỗi lấy danh sách nhật ký:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  // ==================== CSKH LIVE CHAT ====================
+  getChatSessions: async (req, res) => {
+    try {
+      const { role, staffId } = req.query; // role can be SYS_ADMIN or CC
+      let query = `SELECT p.MaPhien, p.NgayTao, p.TrangThai, p.MaHoSo, p.MaTK_CSKH, 
+                          h.TenHoSo 
+                   FROM PHIEN_CHAT_AI p
+                   JOIN HO_SO h ON p.MaHoSo = h.MaHoSo `;
+      let params = {};
+      
+      if (role === 'CC' && staffId) {
+        // If Customer Care, only show their assigned chats or chats waiting for assignment
+        query += `WHERE (p.MaTK_CSKH = :staffId OR p.MaTK_CSKH IS NULL) `;
+        params.staffId = staffId;
+      }
+      query += `ORDER BY p.NgayTao DESC`;
+
+      const result = await db.execute(query, params, { outFormat: db.OUT_FORMAT_OBJECT });
+      res.json(result.rows.map(r => ({
+        sessionId: r.MAPHIEN,
+        createdAt: r.NGAYTAO,
+        status: r.TRANGTHAI,
+        profileId: r.MAHOSO,
+        profileName: r.TENHOSO,
+        staffId: r.MATK_CSKH
+      })));
+    } catch (error) {
+      console.error('Lỗi lấy phiên chat:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  getChatMessages: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await db.execute(
+        `SELECT MaTN, NoiDung, NguoiGui, ThoiGian FROM TIN_NHAN_AI WHERE MaPhien = :id ORDER BY ThoiGian ASC`,
+        { id }, { outFormat: db.OUT_FORMAT_OBJECT }
+      );
+      res.json(result.rows.map(r => ({
+        messageId: r.MATN,
+        content: r.NOIDUNG,
+        sender: r.NGUOIGUI,
+        timestamp: r.THOIGIAN
+      })));
+    } catch (error) {
+      console.error('Lỗi lấy tin nhắn:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  assignSession: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { staffId } = req.body;
+      
+      await db.execute(
+        `UPDATE PHIEN_CHAT_AI SET MaTK_CSKH = :staffId, TrangThai = N'Đang chat' WHERE MaPhien = :id`,
+        { staffId, id }, { autoCommit: true }
+      );
+
+      // Update workload
+      await db.execute(
+        `UPDATE CHAM_SOC_KHACH_HANG SET SoPhienDangXuLy = SoPhienDangXuLy + 1 WHERE MaTK = :staffId`,
+        { staffId }, { autoCommit: true }
+      );
+
+      // Log the assignment
+      await logAdminAction('UPDATE', id, `Gán phiên chat cho nhân viên CSKH: ${staffId}`);
+
+      res.json({ message: 'Gán phiên chat thành công' });
+    } catch (error) {
+      console.error('Lỗi gán phiên chat:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  sendChatMessage: async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { content, staffId } = req.body;
+
+      // Ensure staffId is provided, fallback to 'CC'
+      const sender = 'CC'; // As required by CHK_NguoiGui_TNAI
+
+      // Sinh mã tin nhắn mới
+      const maxTNRes = await db.execute(`SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaTN, 3))), 0) + 1 AS MAXTN FROM TIN_NHAN_AI`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
+      const nextTN = maxTNRes.rows[0].MAXTN || 1;
+      const maTN = 'TN' + String(nextTN).padStart(4, '0');
+
+      await db.execute(
+        `INSERT INTO TIN_NHAN_AI (MaTN, NoiDung, NguoiGui, ThoiGian, MaPhien)
+         VALUES (:maTN, :content, :sender, CURRENT_TIMESTAMP, :id)`,
+        { maTN, content, sender, id }, { autoCommit: true }
+      );
+
+      res.json({ message: 'Đã gửi tin nhắn' });
+    } catch (error) {
+      console.error('Lỗi gửi tin nhắn CSKH:', error);
       res.status(500).json({ message: 'Lỗi server' });
     }
   }

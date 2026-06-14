@@ -58,25 +58,65 @@ const ChatBubble = () => {
     ]);
 
     // Fetch chat history
-    useEffect(() => {
+    const fetchChatHistory = () => {
         if (isLoggedIn && activeProfileId) {
             fetch(`/api/chat/${activeProfileId}`)
                 .then(res => res.json())
                 .then(data => {
                     if (data.length === 0) {
-                        setMessages([{ text: 'Xin chào! 👋 Mình là trợ lý ảo của Nighthub. Mình có thể giúp gì cho bạn hôm nay?', sender: 'bot' }]);
+                        setMessages([{ text: 'Xin chào! 👋 Mình là trợ lý ảo của Nighthub. Mình có thể giúp gì cho bạn hôm nay?', sender: 'ai' }]);
                     } else {
                         setMessages(data);
                     }
                 })
                 .catch(err => console.error('Lỗi khi lấy lịch sử chat:', err));
         }
+    };
+
+    useEffect(() => {
+        fetchChatHistory();
     }, [isLoggedIn, activeProfileId]);
+
+    // Polling cho Live Chat
+    useEffect(() => {
+        let interval;
+        if (isChatOpen && isLoggedIn && activeProfileId) {
+            interval = setInterval(fetchChatHistory, 5000);
+        }
+        return () => clearInterval(interval);
+    }, [isChatOpen, isLoggedIn, activeProfileId]);
+
+    const handleRequestSupport = async () => {
+        if (!activeProfileId) return;
+        setMessages(prev => [...prev, { text: 'Tôi muốn gặp nhân viên CSKH.', sender: 'user' }]);
+        setSuggestions([]);
+        setIsTyping(true);
+        try {
+            const res = await fetch('/api/chat/request-support', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profileId: activeProfileId })
+            });
+            const data = await res.json();
+            // Immediately fetch chat history to get the system auto-message
+            fetchChatHistory();
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setIsTyping(false);
+        }
+    };
 
     const handleSend = async (textToSend) => {
         const text = typeof textToSend === 'string' ? textToSend : inputValue;
         if (!text.trim() || !activeProfileId) return;
         
+        if (text === 'Gặp nhân viên CSKH') {
+            handleRequestSupport();
+            setInputValue('');
+            return;
+        }
+
         const newMessages = [...messages, { text, sender: 'user' }];
         setMessages(newMessages);
         setInputValue('');
@@ -214,29 +254,37 @@ const ChatBubble = () => {
                     <button className="close-chat-btn" onClick={() => setIsChatOpen(false)}>✖</button>
                 </div>
                 <div className="chat-body">
-                    {messages.map((msg, idx) => (
-                        <div key={msg.id || idx} className={`chat-msg-wrapper ${msg.sender === 'user' ? 'user' : 'bot'}`}>
-                            <div className={`chat-msg ${msg.sender === 'user' ? 'user' : 'bot'}`}>
-                                {msg.sender === 'bot' ? renderBotText(msg.text) : msg.text}
-                                
-                                {msg.suggestions && msg.suggestions.length > 0 && (
-                                    <div className="chat-movie-suggestions">
-                                        {msg.suggestions.map((s, i) => (
-                                            <div key={i} className="chat-movie-card" onClick={() => navigate(`/movie/${s.id}`)}>
-                                                <img src={s.poster || '/images/default_poster.jpg'} alt={s.title} />
-                                                <div className="chat-movie-info">
-                                                    <span className="chat-movie-title">{s.title}</span>
-                                                    <span className="chat-movie-badge">
-                                                        {s.requiredPlan === 'VIP' ? 'VIP' : 'Miễn phí'}
-                                                    </span>
+                    {messages.map((msg, idx) => {
+                        const isUser = msg.sender === 'user';
+                        const isCC = msg.sender === 'cc';
+                        
+                        return (
+                            <div key={msg.id || idx} className={`chat-msg-wrapper ${isUser ? 'user' : 'bot'}`}>
+                                <div className={`chat-msg ${isUser ? 'user' : 'bot'}`} style={isCC ? { background: '#1e90ff', color: '#fff' } : {}}>
+                                    {isCC && <strong style={{display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px'}}>NV Hỗ trợ:</strong>}
+                                    {!isUser && !isCC && <strong style={{display: 'block', fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px'}}>NightBot:</strong>}
+                                    
+                                    {!isUser ? renderBotText(msg.text) : msg.text}
+                                    
+                                    {msg.suggestions && msg.suggestions.length > 0 && (
+                                        <div className="chat-movie-suggestions">
+                                            {msg.suggestions.map((s, i) => (
+                                                <div key={i} className="chat-movie-card" onClick={() => navigate(`/movie/${s.id}`)}>
+                                                    <img src={s.poster || '/images/default_poster.jpg'} alt={s.title} />
+                                                    <div className="chat-movie-info">
+                                                        <span className="chat-movie-title">{s.title}</span>
+                                                        <span className="chat-movie-badge">
+                                                            {s.requiredPlan === 'VIP' ? 'VIP' : 'Miễn phí'}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                     {isTyping && (
                         <div className="chat-msg-wrapper bot">
                             <div className="chat-msg bot typing-indicator">
@@ -254,6 +302,9 @@ const ChatBubble = () => {
                                 {sug}
                             </button>
                         ))}
+                        <button className="suggestion-chip" onClick={handleRequestSupport} style={{ border: '1px solid #1e90ff', color: '#1e90ff' }}>
+                            Gặp nhân viên CSKH
+                        </button>
                     </div>
                 )}
 

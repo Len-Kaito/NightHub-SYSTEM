@@ -67,7 +67,7 @@ const chatController = {
       const messages = tnResult.rows.map(row => ({
         id: row.MATN,
         text: row.NOIDUNG,
-        sender: row.NGUOIGUI === 'USER' ? 'user' : 'ai',
+        sender: row.NGUOIGUI === 'USER' ? 'user' : (row.NGUOIGUI === 'CC' ? 'cc' : 'ai'),
         timestamp: row.THOIGIAN,
         suggestions: suggestionsMap[row.MATN] || []
       }));
@@ -255,6 +255,68 @@ User: ${text}`;
     } catch (error) {
       console.error('Lỗi gửi tin nhắn chatbot:', error);
       res.status(500).json({ message: 'Lỗi khi giao tiếp với AI' });
+    }
+  },
+
+  // CSKH
+  requestSupport: async (req, res) => {
+    try {
+      const { profileId } = req.body;
+      if (!profileId) return res.status(400).json({ message: 'Thiếu dữ liệu' });
+
+      // Find active chat session
+      let maPhien;
+      const phienResult = await db.execute(
+        `SELECT MaPhien FROM PHIEN_CHAT_AI WHERE MaHoSo = :profileId AND TrangThai = N'Đang chat' ORDER BY NgayTao DESC FETCH FIRST 1 ROWS ONLY`,
+        { profileId }, { outFormat: db.OUT_FORMAT_OBJECT }
+      );
+
+      if (phienResult.rows.length > 0) {
+        maPhien = phienResult.rows[0].MAPHIEN;
+      } else {
+        // Create new session if no active session
+        const nextPCRes = await db.execute(`SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaPhien, 3))), 0) + 1 AS MAXPC FROM PHIEN_CHAT_AI`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
+        maPhien = 'PC' + String(nextPCRes.rows[0].MAXPC || 1).padStart(3, '0');
+        await db.execute(
+          `INSERT INTO PHIEN_CHAT_AI (MaPhien, NgayTao, TrangThai, MaHoSo) VALUES (:maPhien, CURRENT_TIMESTAMP, N'Đang chat', :profileId)`,
+          { maPhien, profileId }, { autoCommit: true }
+        );
+      }
+
+      // Assign to the least busy CSKH
+      const cskhResult = await db.execute(`SELECT fn_LayCSKHRanhNhat() AS MACSKH FROM DUAL`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
+      const maCskh = cskhResult.rows[0].MACSKH;
+
+      if (maCskh) {
+        // Update session
+        await db.execute(
+          `UPDATE PHIEN_CHAT_AI SET MaTK_CSKH = :maCskh WHERE MaPhien = :maPhien`,
+          { maCskh, maPhien }, { autoCommit: true }
+        );
+
+        // Update workload
+        await db.execute(
+          `UPDATE CHAM_SOC_KHACH_HANG SET SoPhienDangXuLy = SoPhienDangXuLy + 1 WHERE MaTK = :maCskh`,
+          { maCskh }, { autoCommit: true }
+        );
+        
+        // Add auto-message from system
+        const maxTNRes = await db.execute(`SELECT NVL(MAX(TO_NUMBER(SUBSTR(MaTN, 3))), 0) + 1 AS MAXTN FROM TIN_NHAN_AI`, {}, { outFormat: db.OUT_FORMAT_OBJECT });
+        const maTN = 'TN' + String(maxTNRes.rows[0].MAXTN || 1).padStart(4, '0');
+        
+        await db.execute(
+          `INSERT INTO TIN_NHAN_AI (MaTN, NoiDung, NguoiGui, ThoiGian, MaPhien)
+           VALUES (:maTN, :content, 'CC', CURRENT_TIMESTAMP, :maPhien)`,
+          { maTN, content: `Hệ thống đã tự động gán bạn cho nhân viên hỗ trợ [${maCskh}]. Xin vui lòng chờ trong giây lát...`, maPhien }, { autoCommit: true }
+        );
+
+        res.json({ message: 'Đã yêu cầu CSKH thành công', assignedTo: maCskh });
+      } else {
+        res.json({ message: 'Hiện tại tất cả nhân viên CSKH đều đang bận, vui lòng thử lại sau.' });
+      }
+    } catch (error) {
+      console.error('Lỗi gọi CSKH:', error);
+      res.status(500).json({ message: 'Lỗi server' });
     }
   }
 };

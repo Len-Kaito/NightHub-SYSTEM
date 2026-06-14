@@ -22,6 +22,7 @@ router.post('/ads', adminController.createAd);
 
 // ==================== KIỂM DUYỆT ====================
 router.get('/reports', adminController.getReports);
+router.get('/violations', adminController.getViolations);
 router.post('/reports/resolve', adminController.resolveReport);
 router.post('/reports/scan', adminController.scanReports);
 
@@ -33,5 +34,11 @@ router.put('/users/:id/role', adminController.updateUserRole);
 
 // ==================== NHẬT KÝ ====================
 router.get('/logs', adminController.getLogs);
+
+// ==================== CSKH LIVE CHAT ====================
+router.get('/chat-sessions', adminController.getChatSessions);
+router.get('/chat-sessions/:id/messages', adminController.getChatMessages);
+router.put('/chat-sessions/:id/assign', adminController.assignSession);
+router.post('/chat-sessions/:id/messages', adminController.sendChatMessage);
 
 module.exports = router;

@@ -71,25 +71,7 @@ const AdminUsers = () => {
     }
   };
 
-  const handleRoleChange = async (userId, newRole) => {
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: newRole })
-      });
-      if (res.ok) {
-        fetchUsers();
-        showToast('Cập nhật vai trò thành công!');
-      } else {
-        const err = await res.json();
-        showToast(err.message || 'Lỗi cập nhật vai trò', true);
-      }
-    } catch (err) {
-      console.error(err);
-      showToast('Lỗi kết nối server', true);
-    }
-  };
+
 
   // Get unique roles from users
   const uniqueRoles = [...new Set(users.map(u => u.role).filter(Boolean))];
@@ -232,15 +214,7 @@ const AdminUsers = () => {
                         <td style={{ color: '#888', fontWeight: 600 }}>{user.id}</td>
                         <td style={{ fontWeight: 600, color: '#fff' }}>{user.email}</td>
                         <td>
-                          <select
-                            value={user.role || ''}
-                            onChange={e => handleRoleChange(user.id, e.target.value)}
-                            className="admin-select-sm"
-                          >
-                            {uniqueRoles.map(role => (
-                              <option key={role} value={role}>{role}</option>
-                            ))}
-                          </select>
+                          <span style={{ fontWeight: 500 }}>{user.role || '—'}</span>
                         </td>
                         <td>
                           <span className={`badge ${getStatusBadgeClass(user.status)}`}>
