@@ -8,8 +8,7 @@ NightHub là một nền tảng website xem phim trực tuyến hiện đại v�
 
 Trước khi cài đặt, hãy đảm bảo máy tính của bạn đã cài đặt các phần mềm sau:
 1. **Node.js**: (Phiên bản v18.0.0 trở lên). Tải tại: [https://nodejs.org/](https://nodejs.org/)
-2. **Oracle Database**: (Phiên bản 19c hoặc 21c Express Edition). Yêu cầu đã thiết lập User có quyền DBA (ví dụ: `SYS` hoặc `SYSTEM`).
-3. **Git**: Dùng để tải mã nguồn. Tải tại: [https://git-scm.com/](https://git-scm.com/)
+2. **Oracle Database**: Phiên bản 21c Express Edition.
 
 ---
 
@@ -25,7 +24,7 @@ cd nighthub-react
 ### Bước 2: Thiết lập Cơ sở dữ liệu (Oracle Database)
 Dự án sử dụng Oracle SQL. Bạn cần chạy file SQL có sẵn trong thư mục gốc của dự án để khởi tạo cấu trúc và dữ liệu mẫu:
 1. Mở công cụ quản lý Oracle (SQL Developer hoặc SQL*Plus).
-2. Kết nối bằng tài khoản quyền cao (mặc định là `SYSTEM` hoặc `SYS`).
+2. Kết nối bằng tài khoản quyền cao.
 3. Chạy file `build_database.sql` (Tạo bảng, nạp dữ liệu và cấu hình View/Function/Trigger).
 
 > [!IMPORTANT]
@@ -35,9 +34,11 @@ Dự án sử dụng Oracle SQL. Bạn cần chạy file SQL có sẵn trong th�
 
 > [!TIP]
 > **Xóa và Nạp lại dữ liệu (Reset Database):**
-> Nếu trong quá trình chấm bài bạn cần làm sạch Database để test lại từ đầu, bạn chỉ cần:
+> Nếu cần làm sạch Database để test lại từ đầu, bạn chỉ cần:
 > 1. Chạy file `DeleteTable.sql` để xóa toàn bộ cấu trúc cũ.
-> 2. Chạy lại file `build_database.sql` (hoặc `build_db.bat`) để nạp lại dữ liệu tươi mới.
+> 2. Chạy lại file `build_database.sql` để nạp lại dữ liệu tươi mới.
+> 
+> *(Ghi chú thêm: Dữ liệu mẫu ban đầu có thể có một số phim đang ở trạng thái ẩn/chờ duyệt. Nếu muốn trang web hiển thị đầy đủ tất cả các phim, bạn có thể chạy lệnh SQL sau: `UPDATE PHIM SET TrangThaiHT = 'Công khai', TrangThaiKD = 'Đã duyệt'; COMMIT;`)*
 
 ### Bước 3: Cài đặt và Chạy Backend (Node.js)
 Mở một cửa sổ Terminal mới:
