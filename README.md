@@ -72,16 +72,14 @@ npm run dev
 
 ### Bước 5: Truy cập hệ thống
 Sau khi chạy thành công, Terminal sẽ hiển thị đường dẫn cục bộ (thường là `http://localhost:5173/`).
-- Mở trình duyệt và truy cập `http://localhost:5173/` để xem trang người dùng.
-- Giao diện Admin quản trị có thể truy cập tại `http://localhost:5173/admin` (Hoặc theo phân quyền khi đăng nhập bằng tài khoản Quản trị).
 
----
+**Chế độ:**
+Hệ thống có 2 chế độ Quản trị viên và Người dùng có thể sử dụng 2 tài khoản dưới đây:
 
-## 🌟 Chức Năng Nổi Bật
-- **Frontend UI/UX**: Thiết kế responsive, mượt mà, tối giản hóa trải nghiệm xem phim.
-- **AI Chatbot**: Tích hợp Google Gemini AI hỗ trợ tư vấn phim qua dữ liệu SQL.
-- **Admin Dashboard**:
-  - Biểu đồ thống kê trực quan (Recharts) theo dữ liệu thật từ Database (Doanh thu theo tháng/ngày).
-  - Hệ thống kiểm duyệt bình luận rác/vi phạm sử dụng Trigger tự động.
-  - Form CMS đa năng cập nhật cấu trúc bảng liên kết (Phim - Đạo Diễn - Diễn Viên - Đối Tác).
-- **PL/SQL Mạnh Mẽ**: Sử dụng hàng chục Stored Procedures, Functions, Cursors và Triggers để đảm bảo tính nhất quán dữ liệu và tự động hóa nghiệp vụ (Hạ cấp VIP, Xóa vi phạm...).
+1. **Giao diện Người dùng (User):**
+   - **Email:** `user.vip01@gmail.com`
+   - **Mật khẩu:** `2a12$hash13...`
+
+2. **Giao diện Quản trị viên (Admin Dashboard):**
+   - **Email:** `huynq@sys.nighthub.com`
+   - **Mật khẩu:** `2a12$hash01...`
